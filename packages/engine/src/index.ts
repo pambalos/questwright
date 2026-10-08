@@ -6,6 +6,7 @@ export * from './ledger';
 export * from './reconcile';
 export * from './extraction';
 export * from './sample';
+export * from './slots';
 
 import type { Project } from './types';
 

@@ -20,6 +20,7 @@ import {
   type Look,
   type Manuscript,
   type Project,
+  type Rarity,
   type Skim,
 } from '@questwright/engine';
 import { create } from 'zustand';
@@ -110,6 +111,8 @@ export interface StudioState extends Persisted {
   setArtStyle(style: ArtStyle): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
   setValue(pid: string, characterId: string, kind: 'currency' | 'item', name: string, value: number): void;
+  /** Author correction: the character puts these on from the paragraph at `pid` onwards. */
+  wear(pid: string, characterId: string, items: { item: string; slot: string; rarity?: Rarity }[]): void;
   merge(from: string, into: string): void;
   setAiStatus(status: AiStatus, backend?: AiBackend | null): void;
   setAiEnabled(on: boolean): void;
@@ -332,6 +335,13 @@ export const useStudio = create<StudioState>()(
               ? ({ kind: 'currency', character: characterId, currency: name, delta: 0, set: value } as const)
               : ({ kind: 'item', character: characterId, item: name, delta: 0, set: value } as const);
           project.records.push({ id: newId(), paragraphId: pid, textHash: '', source: 'author', status: 'applied', change });
+          commit({ project });
+        },
+        wear(pid, characterId, items) {
+          const project = structuredClone(get().project);
+          for (const { item, slot, rarity } of items) {
+            project.records.push({ id: newId(), paragraphId: pid, textHash: '', source: 'author', status: 'applied', change: { kind: 'equip', character: characterId, item, slot, rarity } });
+          }
           commit({ project });
         },
         merge(from, into) {

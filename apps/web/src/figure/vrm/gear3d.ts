@@ -1,7 +1,7 @@
 import type { VRM, VRMHumanBoneName } from '@pixiv/three-vrm';
 import type { ArtStyle, Look } from '@questwright/engine';
 import * as THREE from 'three';
-import { RARITY_COLOR, type Feature, type WeaponKind } from '../gear';
+import { RARITY_COLOR, type Feature, type GearMaterial, type WeaponKind } from '../gear';
 import { tone } from '../look';
 
 export type Anim = (t: number, dt: number) => void;
@@ -25,6 +25,43 @@ const glowMat = (hex: string, intensity = 3) =>
 
 const rarityHex = (r?: string) => RARITY_COLOR[(r as keyof typeof RARITY_COLOR) ?? 'common'] ?? RARITY_COLOR.common;
 const special = (r?: string) => !!r && r !== 'common';
+
+/** The surface for a piece of armour, from what its name says it is made of. */
+function surface(m: GearMaterial | undefined, fallback: GearMaterial, cloth: string): THREE.Material {
+  switch (m ?? fallback) {
+    case 'obsidian':
+      // Volcanic glass: near black, glossy, with a faint violet sheen where the light catches it.
+      return new THREE.MeshPhysicalMaterial({ color: 0x121019, metalness: 0.05, roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.05, sheen: 0.6, sheenRoughness: 0.35, sheenColor: new THREE.Color(0x5a3d8a), envMapIntensity: 1.6 });
+    case 'iron':
+      return new THREE.MeshStandardMaterial({ color: 0x5f6066, metalness: 0.9, roughness: 0.55 });
+    case 'gold':
+      return gold();
+    case 'silver':
+      return new THREE.MeshStandardMaterial({ color: 0xdfe6ee, metalness: 1, roughness: 0.18 });
+    case 'bronze':
+      return new THREE.MeshStandardMaterial({ color: 0xa8703a, metalness: 1, roughness: 0.38 });
+    case 'leather':
+      return leather();
+    case 'cloth':
+      return new THREE.MeshStandardMaterial({ color: new THREE.Color(cloth), roughness: 0.92 });
+    case 'bone':
+      return new THREE.MeshStandardMaterial({ color: 0xe6dcc4, roughness: 0.6 });
+    case 'wood':
+      return wood();
+    case 'crystal':
+      return new THREE.MeshPhysicalMaterial({ color: 0xbfe4ff, metalness: 0, roughness: 0.05, transmission: 0.6, thickness: 0.05, clearcoat: 1 });
+    default:
+      return steel();
+  }
+}
+
+/** Edge trim: glowing on rare gear, otherwise a contrasting metal. */
+function trim(m: GearMaterial | undefined, rarity?: string): THREE.Material {
+  if (special(rarity)) return glowMat(rarityHex(rarity), 1.6);
+  if (m === 'obsidian') return new THREE.MeshStandardMaterial({ color: 0x2a2433, metalness: 0.8, roughness: 0.3 });
+  if (m === 'leather' || m === 'cloth') return new THREE.MeshStandardMaterial({ color: 0x8a6a3a, metalness: 0.6, roughness: 0.5 });
+  return gold();
+}
 
 let softDot: THREE.Texture | null = null;
 /** A soft round sprite for particles and glows. */
@@ -127,6 +164,20 @@ export function weapon(kind: WeaponKind, rarity?: string): THREE.Group {
       if (special(rarity)) g.add(mesh(new THREE.BoxGeometry(0.01, 0.12, 0.02), glowMat(rarityHex(rarity)), [0.2, 0.58, 0]));
       break;
     }
+    case 'hammer': {
+      g.add(mesh(new THREE.CylinderGeometry(0.016, 0.019, 0.62, 10), wood(), [0, 0.2, 0]));
+      g.add(mesh(new THREE.BoxGeometry(0.17, 0.08, 0.08), darkSteel(), [0, 0.52, 0]));
+      for (const x of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(0.012, 0.09, 0.09), steel(), [x * 0.09, 0.52, 0]));
+      if (special(rarity)) g.add(mesh(new THREE.BoxGeometry(0.06, 0.01, 0.085), glowMat(rarityHex(rarity)), [0, 0.565, 0]));
+      break;
+    }
+    case 'spear': {
+      g.add(mesh(new THREE.CylinderGeometry(0.013, 0.015, 1.5, 10), wood(), [0, 0.35, 0]));
+      const tip = mesh(new THREE.ConeGeometry(0.03, 0.18, 4), steel(), [0, 1.18, 0]);
+      tip.scale.set(1, 1, 0.35);
+      g.add(tip, mesh(new THREE.CylinderGeometry(0.018, 0.016, 0.05, 10), leather(), [0, 1.07, 0]));
+      break;
+    }
     case 'mace': {
       g.add(mesh(new THREE.CylinderGeometry(0.015, 0.018, 0.55, 10), leather(), [0, 0.2, 0]));
       g.add(mesh(new THREE.SphereGeometry(0.05, 16, 12), darkSteel(), [0, 0.5, 0]));
@@ -168,12 +219,25 @@ function shield(look: Look, style: ArtStyle, rarity?: string): THREE.Group {
   return g;
 }
 
-function helm(rarity?: string): THREE.Group {
+function helm(rarity: string | undefined, material: GearMaterial | undefined, cloth: string): THREE.Group {
   const g = new THREE.Group();
-  const dome = mesh(new THREE.SphereGeometry(0.135, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.52), steel());
+  const shell = surface(material, 'steel', cloth);
+  const edge = trim(material, rarity);
+  const dome = mesh(new THREE.SphereGeometry(0.135, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.52), shell);
   dome.scale.set(1, 1.05, 1.12);
   g.add(dome);
-  g.add(mesh(new THREE.TorusGeometry(0.137, 0.008, 8, 48), special(rarity) ? glowMat(rarityHex(rarity), 2) : gold(), [0, 0.0, 0], [Math.PI / 2, 0, 0]));
+  g.add(mesh(new THREE.TorusGeometry(0.137, 0.008, 8, 48), special(rarity) ? glowMat(rarityHex(rarity), 2) : edge, [0, 0.0, 0], [Math.PI / 2, 0, 0]));
+  if (material && material !== 'steel') {
+    // A closed war helm: cheek guards, a nose guard and a ridge, no plume.
+    for (const x of [-1, 1]) {
+      const cheek = mesh(new THREE.SphereGeometry(0.135, 16, 10, x > 0 ? 0 : Math.PI * 1.55, Math.PI * 0.45, Math.PI * 0.5, Math.PI * 0.32), shell);
+      cheek.scale.set(1.02, 1.05, 1.14);
+      g.add(cheek);
+    }
+    g.add(mesh(new THREE.BoxGeometry(0.022, 0.1, 0.02), shell, [0, -0.03, 0.15]));
+    g.add(mesh(new THREE.BoxGeometry(0.02, 0.03, 0.27), edge, [0, 0.135, 0]));
+    return g;
+  }
   // Riveted band and a swept plume.
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2;
@@ -298,33 +362,157 @@ export function rigGear(vrm: VRM, features: Feature[], look: Look, style: ArtSty
     });
   }
 
+  /* Measurements of this body, in the same units as `attach` positions (a 1.6 m figure). */
+  vrm.scene.updateMatrixWorld(true);
+  const at = (name: VRMHumanBoneName) => {
+    const b = bone(name);
+    return b ? b.getWorldPosition(new THREE.Vector3()) : null;
+  };
+  const span = (a: VRMHumanBoneName, b: VRMHumanBoneName, fallback: number) => {
+    const p = at(a);
+    const q = at(b);
+    return p && q ? p.distanceTo(q) / k : fallback;
+  };
+  const shoulders = span('leftUpperArm', 'rightUpperArm', 0.34);
+  const hipsW = span('leftUpperLeg', 'rightUpperLeg', 0.2);
+  const thigh = span('leftUpperLeg', 'leftLowerLeg', 0.4);
+  const shin = span('leftLowerLeg', 'leftFoot', 0.38);
+  const forearm = span('leftLowerArm', 'leftHand', 0.24);
+  const torsoBone: VRMHumanBoneName = bone('upperChest') ? 'upperChest' : 'chest';
+  const torsoTop = span(torsoBone, 'neck', 0.12);
+  const torsoDrop = span(torsoBone, 'hips', 0.3);
+  const cloth = tone(look.cloth, style, 0.8);
+  const side = (s: 'left' | 'right') => (s === 'left' ? 1 : -1);
+  /** Keeps a mesh's own offset and turn when attached (attach sets the outer transform). */
+  const wrap = (o: THREE.Object3D) => new THREE.Group().add(o);
+
   const hm = one('helm');
   if (hm) {
     // Fit the helm over the hair: anime heads are large relative to the body.
-    const h = helm(hm.rarity);
-    const r = body.headTop * 0.5;
+    const h = helm(hm.rarity, hm.material, cloth);
+    const r = body.headTop * 0.56;
     h.scale.setScalar(r / 0.135 / k);
-    attach('head', h, [0, (body.headTop * 0.6) / k, -0.015], [-0.12, 0, 0], hm.key);
+    attach('head', h, [0, (body.headTop * 0.52) / k, -0.015], [-0.12, 0, 0], hm.key);
+  }
+  const hood = one('hood');
+  if (hood && !hm) {
+    // A cloth hood: a loose shell over the back and top of the head. The sphere's gap (phi 0.25π to 0.75π) faces +z, the face.
+    const r = body.headTop * 0.58;
+    const shell = mesh(new THREE.SphereGeometry(r / k, 28, 18, Math.PI * 0.75, Math.PI * 1.5, 0, Math.PI * 0.72), surface(hood.material, 'cloth', cloth));
+    (shell.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+    shell.scale.set(1, 1.08, 1.12);
+    attach('head', wrap(shell), [0, (body.headTop * 0.42) / k, -0.02], [-0.15, 0, 0], hood.key);
   }
 
   const ar = one('armor');
   if (ar) {
+    // A breastplate shaped around this torso: wider at the chest, narrower at the waist, flatter front to back.
+    const shell = surface(ar.material, 'steel', cloth);
+    const edge = trim(ar.material, ar.rarity);
+    const g = new THREE.Group();
+    const r = shoulders * 0.56;
+    const top = torsoTop * 0.62;
+    const bottom = -torsoDrop * 0.8;
+    const profile = [
+      [r * 0.78, bottom],
+      [r * 0.86, bottom * 0.55],
+      [r * 1.0, bottom * 0.1],
+      [r * 1.04, top * 0.35],
+      [r * 0.9, top * 0.85],
+      [r * 0.58, top],
+    ].map(([x, y]) => new THREE.Vector2(x, y));
+    const plate = mesh(new THREE.LatheGeometry(profile, 36), shell);
+    plate.scale.set(1, 1, 0.78);
+    g.add(plate);
+    // Banded lower plates and a raised centre ridge.
+    for (const y of [bottom * 0.55, bottom * 0.2]) {
+      const band = mesh(new THREE.TorusGeometry(r * 0.94, 0.006, 6, 48), edge, [0, y, 0], [Math.PI / 2, 0, 0]);
+      band.scale.set(1, 0.74, 1);
+      g.add(band);
+    }
+    g.add(mesh(new THREE.BoxGeometry(0.014, (top - bottom) * 0.8, 0.02), edge, [0, (top + bottom) / 2, r * 0.74]));
+    const gorget = mesh(new THREE.TorusGeometry(r * 0.52, 0.018, 8, 32), shell, [0, top, 0], [Math.PI / 2, 0, 0]);
+    gorget.scale.set(1, 0.8, 1);
+    g.add(gorget);
+    // Pauldrons over the shoulder joints.
+    for (const x of [-1, 1]) {
+      const p = mesh(new THREE.SphereGeometry(0.075, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), shell, [x * shoulders * 0.5, top * 0.55, 0], [0, 0, -x * 0.45]);
+      p.scale.set(1.15, 0.7, 1.15);
+      g.add(p);
+      g.add(mesh(new THREE.TorusGeometry(0.08, 0.005, 6, 32), edge, [x * shoulders * 0.5, top * 0.55, 0], [Math.PI / 2, -x * 0.45, 0]));
+    }
+    attach(torsoBone, g, [0, 0, 0], [0, 0, 0], ar.key);
+    // Tassets hanging from the waist.
+    const tassets = new THREE.Group();
+    for (const x of [-1, 0, 1]) {
+      const t = mesh(new THREE.BoxGeometry(hipsW * 0.5, 0.11, 0.012), shell, [x * hipsW * 0.45, -0.02, r * 0.66], [0.12, x * 0.35, 0]);
+      tassets.add(t);
+    }
+    attach('hips', tassets, [0, 0, 0], [0, 0, 0]);
+  }
+  const pd = one('pauldrons');
+  if (pd && !ar) {
     const g = new THREE.Group();
     for (const x of [-1, 1]) {
-      const p = mesh(new THREE.SphereGeometry(0.085, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), steel(), [x * 0.17, 0.05, 0], [0, 0, -x * 0.5]);
-      p.scale.set(1, 0.6, 1.1);
+      const p = mesh(new THREE.SphereGeometry(0.075, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), surface(pd.material, 'steel', cloth), [x * shoulders * 0.5, torsoTop * 0.3, 0], [0, 0, -x * 0.45]);
+      p.scale.set(1.15, 0.7, 1.15);
       g.add(p);
-      if (special(ar.rarity)) g.add(mesh(new THREE.TorusGeometry(0.085, 0.006, 6, 32), glowMat(rarityHex(ar.rarity), 1.5), [x * 0.17, 0.05, 0], [Math.PI / 2, -x * 0.5, 0]));
     }
-    const gorget = mesh(new THREE.TorusGeometry(0.075, 0.02, 8, 32), steel(), [0, 0.13, 0.01], [Math.PI / 2 - 0.2, 0, 0]);
-    gorget.scale.set(1, 1, 0.6);
-    g.add(gorget);
-    attach('upperChest', g, [0, 0.0, 0], [0, 0, 0], ar.key);
+    attach(torsoBone, g, [0, 0, 0], [0, 0, 0], pd.key);
   }
+
   const gl = one('gloves');
-  if (gl) for (const side of ['left', 'right'] as const) attach(`${side}LowerArm`, mesh(new THREE.CylinderGeometry(0.038, 0.042, 0.12, 16), leather(), [side === 'left' ? 0.17 : -0.17, 0, 0], [0, 0, Math.PI / 2]), [0, 0, 0], [0, 0, 0], side === 'left' ? gl.key : undefined);
+  if (gl) {
+    const shell = surface(gl.material, 'leather', cloth);
+    for (const s of ['left', 'right'] as const) {
+      const x = side(s);
+      // Gauntlet: a flared cuff at the wrist and a plate over the back of the hand.
+      const cuff = mesh(new THREE.CylinderGeometry(0.036, 0.046, forearm * 0.35, 16), shell, [x * forearm * 0.82, 0, 0], [0, 0, x * Math.PI / 2]);
+      attach(`${s}LowerArm`, wrap(cuff), [0, 0, 0], [0, 0, 0], s === 'left' ? gl.key : undefined);
+      const back = mesh(new THREE.BoxGeometry(0.085, 0.03, 0.07), shell, [x * 0.045, 0.004, 0]);
+      attach(`${s}Hand`, wrap(back), [0, 0, 0]);
+    }
+  }
+  const br = one('bracers');
+  if (br && !gl) {
+    const shell = surface(br.material, 'leather', cloth);
+    for (const s of ['left', 'right'] as const) {
+      const x = side(s);
+      attach(`${s}LowerArm`, wrap(mesh(new THREE.CylinderGeometry(0.042, 0.038, forearm * 0.5, 16), shell, [x * forearm * 0.6, 0, 0], [0, 0, x * Math.PI / 2])), [0, 0, 0], [0, 0, 0], s === 'left' ? br.key : undefined);
+    }
+  }
+  const gr = one('greaves');
+  if (gr) {
+    const shell = surface(gr.material, 'steel', cloth);
+    const edge = trim(gr.material, gr.rarity);
+    const thighR = hipsW * 0.5;
+    for (const s of ['left', 'right'] as const) {
+      // Cuisse over the thigh, a knee cop, and a greave down the shin.
+      const cuisse = mesh(new THREE.CylinderGeometry(thighR, thighR * 0.82, thigh * 0.72, 18), shell, [0, -thigh * 0.42, 0.004]);
+      cuisse.scale.set(1, 1, 0.92);
+      attach(`${s}UpperLeg`, wrap(cuisse), [0, 0, 0], [0, 0, 0], s === 'left' ? gr.key : undefined);
+      const knee = mesh(new THREE.SphereGeometry(thighR * 0.72, 16, 12), shell, [0, 0, thighR * 0.38]);
+      knee.scale.set(1, 0.9, 0.7);
+      attach(`${s}LowerLeg`, wrap(knee), [0, 0, 0]);
+      attach(`${s}LowerLeg`, wrap(mesh(new THREE.TorusGeometry(thighR * 0.8, 0.006, 6, 24), edge, [0, -shin * 0.1, 0.004], [Math.PI / 2, 0, 0])), [0, 0, 0]);
+      const greave = mesh(new THREE.CylinderGeometry(thighR * 0.72, thighR * 0.6, shin * 0.62, 18), shell, [0, -shin * 0.42, 0.006]);
+      greave.scale.set(1, 1, 0.95);
+      attach(`${s}LowerLeg`, wrap(greave), [0, 0, 0]);
+    }
+  }
   const bt = one('boots');
-  if (bt) for (const side of ['left', 'right'] as const) attach(`${side}LowerLeg`, mesh(new THREE.CylinderGeometry(0.055, 0.05, 0.22, 16), steel(), [0, -0.22, 0.01]), [0, 0, 0], [0, 0, 0], side === 'left' ? bt.key : undefined);
+  if (bt) {
+    const shell = surface(bt.material, 'leather', cloth);
+    for (const s of ['left', 'right'] as const) {
+      attach(`${s}LowerLeg`, wrap(mesh(new THREE.CylinderGeometry(0.058, 0.054, shin * 0.36, 16), shell, [0, -shin * 0.8, 0.006])), [0, 0, 0], [0, 0, 0], s === 'left' ? bt.key : undefined);
+      const foot = new THREE.Group();
+      const sole = mesh(new THREE.BoxGeometry(0.1, 0.09, 0.23), shell, [0, -0.03, 0.05]);
+      const toe = mesh(new THREE.SphereGeometry(0.055, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), shell, [0, -0.06, 0.16], [Math.PI / 2, 0, 0]);
+      toe.scale.set(1, 0.9, 0.7);
+      foot.add(sole, toe);
+      attach(`${s}Foot`, foot, [0, 0, 0]);
+    }
+  }
 
   if (body.barefoot && !one('boots')) {
     const boot = new THREE.MeshStandardMaterial({ color: 0x3b2617, roughness: 0.7 });

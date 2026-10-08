@@ -385,6 +385,20 @@ function weaponShape(kind: WeaponKind, h: { x: number; y: number }, edge: string
           <circle cx={h.x + 6} cy={h.y - 56} r="9" fill={STEEL} {...O} />
         </>
       );
+    case 'hammer':
+      return (
+        <>
+          <path d={`M${h.x + 2} ${h.y + 8} L${h.x + 6} ${h.y - 50}`} stroke="#6b4a2a" strokeWidth="4" strokeLinecap="round" />
+          <rect x={h.x - 6} y={h.y - 64} width="24" height="14" rx="2" fill={STEEL} {...O} transform={`rotate(4 ${h.x + 6} ${h.y - 57})`} />
+        </>
+      );
+    case 'spear':
+      return (
+        <>
+          <path d={`M${h.x + 6} ${h.y + 90} L${h.x - 4} ${h.y - 100}`} stroke="#6b4a2a" strokeWidth="3.5" strokeLinecap="round" />
+          <path d={`M${h.x - 4} ${h.y - 98} L${h.x - 9} ${h.y - 112} L${h.x - 4} ${h.y - 128} L${h.x + 1} ${h.y - 112} Z`} fill={STEEL} {...O} />
+        </>
+      );
     default:
       return <circle cx={h.x} cy={h.y - 14} r="6" fill={glowEdge} opacity=".9" className="pulse" />;
   }

@@ -313,8 +313,12 @@ export function applyExtraction(
   const resolved = resolveDrafts(reg, drafts.map((d) => d.change));
   created.push(...resolved.created);
 
+  // What this paragraph already has: system boxes, author corrections, and finds the author
+  // claimed or dismissed on an earlier reading. Only still-pending finds are replaced.
   const existing = new Set(
-    project.records.filter((r) => r.paragraphId === paragraphId && r.source !== 'ai').map((r) => changeKey(withCanonical(r.change, project))),
+    project.records
+      .filter((r) => r.paragraphId === paragraphId && (r.source !== 'ai' || r.status !== 'proposed'))
+      .map((r) => changeKey(withCanonical(r.change, project))),
   );
   let proposals = 0;
   resolved.changes.forEach((change, i) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { FREE_POINTS, label, type ArtStyle, type ContinuityWarning, type HairStyle, type Look, type Outfit, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
+import { FREE_POINTS, label, slotFor, type Rarity, type ArtStyle, type ContinuityWarning, type HairStyle, type Look, type Outfit, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
 import { useMemo, useState, type ReactNode } from 'react';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
 import { frameFromProse } from '@/figure/vrm/models';
@@ -31,6 +31,7 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
   const toggleLock = useStudio((s) => s.toggleAppearanceLock);
   const setLook = useStudio((s) => s.setLook);
   const setValue = useStudio((s) => s.setValue);
+  const wear = useStudio((s) => s.wear);
   const [hover, setHover] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const features = useMemo(() => gearFor(sheet), [sheet]);
@@ -79,6 +80,14 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
     );
   };
   const set = (patch: Partial<Look>) => setLook(sheet.characterId, { ...look, ...patch });
+  // Carried gear that could be worn: one per slot, so a set fills the figure instead of swapping helmets.
+  const worn = new Set(Object.values(sheet.equipment).map((e) => e.item));
+  const wearable: Wearable[] = [];
+  for (const [item, v] of Object.entries(sheet.items)) {
+    const slot = slotFor(item);
+    if (slot && !worn.has(item)) wearable.push({ item, slot, rarity: v.rarity });
+  }
+  const putOn: PutOn = (xs) => atPid && wear(atPid, sheet.characterId, xs);
 
   return (
     <>
@@ -131,7 +140,7 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
       )}
       {sheet.panels.filter((p) => p !== 'equipment').map((p) => (
         <Section key={p} id={`${sheet.characterId}:${p}`} title={TITLES[p]} count={count(sheet, p)}>
-          {body(sheet, p, warnings.filter((w) => w.characterId === sheet.characterId), onJump, correct)}
+          {body(sheet, p, warnings.filter((w) => w.characterId === sheet.characterId), onJump, correct, wearable, putOn)}
         </Section>
       ))}
     </>
@@ -150,8 +159,14 @@ function count(s: Sheet, p: PanelKey): string | undefined {
 }
 
 type Correct = (kind: 'currency' | 'item', name: string, current: number) => void;
+interface Wearable {
+  item: string;
+  slot: string;
+  rarity?: Rarity;
+}
+type PutOn = (items: Wearable[]) => void;
 
-function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid: string) => void, correct: Correct): ReactNode {
+function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid: string) => void, correct: Correct, wearable: Wearable[], putOn: PutOn): ReactNode {
   const unsure = (key: string) => s.unconfirmed.includes(key);
   switch (p) {
     case 'stats': {
@@ -171,6 +186,18 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid
     }
     case 'inventory':
       return (
+        <>
+        {wearable.length > 0 && (
+          <div className="wear" aria-label="Gear that can be worn">
+            <span className="wear-h">Ready to wear</span>
+            {wearable.map((w) => (
+              <button key={w.item} className="mini" title={`Put ${w.item} on (${w.slot}) from this point in the story`} onClick={() => putOn([w])}>
+                {w.item} <small>{w.slot}</small>
+              </button>
+            ))}
+            {wearable.length > 1 && <button className="mini on" onClick={() => putOn(oneEach(wearable))}>Wear all</button>}
+          </div>
+        )}
         <div className="bag">
           {Object.entries(s.items).map(([n, v]) => (
             <button key={n} className={`cell${unsure(`item:${n}`) ? ' unsure' : ''}`} title={`${n}. Click to correct the count.`} onClick={() => correct('item', n, v.count)}>
@@ -181,6 +208,7 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid
           ))}
           {!Object.keys(s.items).length && <p className="note">Empty for now.</p>}
         </div>
+        </>
       );
     case 'skills':
       return (
@@ -225,6 +253,11 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid
     case 'equipment':
       return null;
   }
+}
+
+/** The last-gained item for each slot, so wearing everything puts on the newest set. */
+function oneEach(xs: Wearable[]): Wearable[] {
+  return [...new Map(xs.map((w) => [w.slot, w])).values()];
 }
 
 function Section({ id, title, count, children }: { id: string; title: string; count?: string; children: ReactNode }) {
