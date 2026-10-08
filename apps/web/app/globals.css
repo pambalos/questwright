@@ -233,3 +233,6 @@ button.cell { color: inherit; font: inherit; cursor: pointer; }
 .dlg .acts { justify-content: flex-end; }
 .dlg .acts button, .dlg > button { border: 1px solid var(--hud-line); background: var(--hud-3); border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: var(--hud-text); }
 .dlg .go { background: var(--gold) !important; color: #1a1405 !important; border-color: var(--gold) !important; align-self: flex-start; }
+.v3d-loading { position: absolute; inset: auto 16px 40px; display: flex; flex-direction: column; gap: 6px; align-items: center; font-family: var(--f-display); font-size: 13px; color: var(--gold); letter-spacing: .06em; pointer-events: none; }
+.v3d-loading i { display: block; height: 3px; width: 0; max-width: 100%; align-self: flex-start; background: var(--gold); border-radius: 2px; transition: width .2s; }
+.fig3d { height: 460px; }

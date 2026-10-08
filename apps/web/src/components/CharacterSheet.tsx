@@ -2,7 +2,8 @@
 
 import { FREE_POINTS, label, type ArtStyle, type ContinuityWarning, type HairStyle, type Look, type Outfit, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
 import { useMemo, useState, type ReactNode } from 'react';
-import { Figure3D } from '@/figure/Figure3D';
+import { CharacterModel } from '@/figure/vrm/CharacterModel';
+import { frameFromProse } from '@/figure/vrm/models';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
 import { useStudio } from '@/lib/store';
@@ -33,6 +34,11 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
   const [hover, setHover] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const features = useMemo(() => gearFor(sheet), [sheet]);
+  const manuscript = useStudio((s) => s.manuscript);
+  const suggested = useMemo(
+    () => (character ? frameFromProse(manuscript.chapters.flatMap((c) => c.paragraphs.map((p) => p.text)), [character.name, ...character.aliases]) : undefined),
+    [manuscript, character],
+  );
   const protagonistId = useStudio((s) => s.project.protagonistId);
   const look = useMemo(() => (character ? lookOf(character, protagonistId) : null), [character, protagonistId]);
   if (!character || !look) return null;
@@ -84,7 +90,7 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
         <div className="doll-grid">
           <div className="scol">{left.map(tile)}</div>
           <div className="fig3d">
-            <Figure3D id={sheet.characterId} look={look} features={features} style={style} highlight={hover} label={`${name}, wearing what the story has given them`} />
+            <CharacterModel character={character} suggestedModel={suggested} look={look} features={features} style={style} highlight={hover} label={`${name}, wearing what the story has given them`} />
           </div>
           <div className="scol">{right.map(tile)}</div>
         </div>

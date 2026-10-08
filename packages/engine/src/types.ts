@@ -32,7 +32,7 @@ export interface Character {
   /** Look traits the author chose for the character figure. */
   look?: Look;
   /** Look traits the story describes, read by the AI; used where the author has not chosen. */
-  lookHints?: Partial<Pick<Look, 'outfit' | 'hair' | 'hairColor' | 'cloth'>>;
+  lookHints?: Partial<Pick<Look, 'outfit' | 'hair' | 'hairColor' | 'cloth' | 'model'>>;
   /** The author asked for a figure before the character earned a tab. */
   drawn?: boolean;
 }
@@ -49,6 +49,8 @@ export interface Look {
   accent: string;
   /** Height relative to an average adult, 0.85 to 1.15. */
   build: number;
+  /** Which 3D base model to use: a built-in id, or "custom" for one the author uploaded. */
+  model?: string;
 }
 
 export type Registry = Record<string, Character>;
