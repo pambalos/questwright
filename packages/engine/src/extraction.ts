@@ -31,6 +31,14 @@ export const ExtractionSchema = z.object({
       role: z.string().nullable(),
       description: z.string().nullable(),
       sameAs: z.string().nullable(),
+      look: z
+        .object({
+          outfit: z.enum(['tunic', 'robe', 'coat', 'cloak', 'armor']).nullable(),
+          hair: z.enum(['short', 'long', 'spiky', 'bald', 'hood']).nullable(),
+          hairColor: z.string().nullable(),
+          clothColor: z.string().nullable(),
+        })
+        .nullable(),
     }),
   ),
   changes: z.array(
@@ -58,7 +66,7 @@ Rules:
 - equip: name is the item, slot is a short slot name such as Main hand, Off hand, Head, Chest, Belt, Ring, Back. Equipping something already carried is only an equip.
 - appearance: a lasting physical change worth showing on the character's figure, such as a scar, a lost limb or a new tattoo. name is a short description.
 - rarity: only when the text signals it (glowing, legendary, a named artifact). Otherwise null.
-- characters: every named or clearly identified character present in the paragraph. role and description only from what the text says, otherwise null. sameAs: when the paragraph reveals that a name belongs to someone already known (the stranger turns out to be Lyra), give the known name; otherwise null.
+- characters: every named or clearly identified character present in the paragraph. role and description only from what the text says, otherwise null. look: only traits the text states (a grey cloak is outfit "cloak" and clothColor "#7d7f86"; colours as #rrggbb hex), otherwise null fields or null. sameAs: when the paragraph reveals that a name belongs to someone already known (the stranger turns out to be Lyra), give the known name; otherwise null.
 - quote: the shortest exact span of the paragraph that shows the change, copied character for character.
 Return empty lists when nothing applies.`;
 
@@ -112,11 +120,11 @@ export function describeChange(c: Change, nameOf: (id: string) => string = (x) =
     case 'title':
       return `Title: ${c.name}`;
     case 'currency':
-      return `${sign(c.delta)} ${c.currency}`;
+      return c.set !== undefined ? `${c.currency} set to ${c.set}` : `${sign(c.delta)} ${c.currency}`;
     case 'skill':
       return c.replaces ? `${c.replaces} evolves into ${c.skill} (Lv ${c.level})` : `Skill: ${c.skill} (Lv ${c.level})`;
     case 'item':
-      return `${sign(c.delta)} ${c.item}`;
+      return c.set !== undefined ? `${c.item} set to ${c.set}` : `${sign(c.delta)} ${c.item}`;
     case 'equip':
       return `${c.item} → ${c.slot} slot`;
     case 'unequip':
@@ -210,6 +218,13 @@ export function applyExtraction(
   const records: ChangeRecord[] = [];
   const merges: Change[] = [];
 
+  const hex = (v: string | null | undefined) => (v && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : undefined);
+  const hintsFrom = (look: Extraction['characters'][number]['look']) => {
+    if (!look) return undefined;
+    const h = { outfit: look.outfit ?? undefined, hair: look.hair ?? undefined, hairColor: hex(look.hairColor), cloth: hex(look.clothColor) };
+    const kept = Object.fromEntries(Object.entries(h).filter(([, v]) => v !== undefined));
+    return Object.keys(kept).length ? kept : undefined;
+  };
   for (const c of result.characters) {
     let hit = findByName(reg, c.name);
     if (!hit) {
@@ -223,6 +238,8 @@ export function applyExtraction(
       const known = c.sameAs ? findByName(reg, c.sameAs) : undefined;
       if (known && canonical(reg, hit.id) !== canonical(reg, known.id)) merges.push({ kind: 'merge', from: hit.id, into: known.id });
     }
+    const hints = hintsFrom(c.look);
+    if (hints) hit.lookHints = { ...hit.lookHints, ...hints };
     records.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'applied', change: { kind: 'mention', character: hit.id } });
   }
 

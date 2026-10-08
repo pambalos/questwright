@@ -53,7 +53,7 @@ export function Header() {
       <div className="xp" title={`${words} words`}>
         <b>Author Lv {level}</b>
         <span className="bar"><i style={{ width: `${pct}%` }} /></span>
-        <span>{words.toLocaleString()} words</span>
+        <span>{words.toLocaleString()} words · {s.achievements.length} achievements</span>
       </div>
       <span className={`pill ${ai.cls}`}><span className="dot" />{ai.text}</span>
       {s.aiStatus === 'on' && (

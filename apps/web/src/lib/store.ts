@@ -10,7 +10,9 @@ import {
   reconcile,
   SAMPLE,
   SAMPLE_TITLE,
+  type ArtStyle,
   type Extraction,
+  type Look,
   type Manuscript,
   type Project,
 } from '@questwright/engine';
@@ -18,6 +20,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { BLANK_DOC, docToManuscript, manuscriptToDoc } from './doc';
 import { newId } from './ids';
+import { ACHIEVEMENTS } from './achievements';
 import { snapshot, unlockToasts, type Snapshot, type Toast } from './unlocks';
 
 export type AiStatus = 'checking' | 'on' | 'off' | 'locked';
@@ -29,6 +32,8 @@ interface Persisted {
   collapsed: string[];
   aiEnabled: boolean;
   accessCode: string;
+  /** Author achievements earned in this browser. */
+  achievements: string[];
 }
 
 export interface StudioState extends Persisted {
@@ -47,6 +52,8 @@ export interface StudioState extends Persisted {
   seen: Snapshot | null;
   /** Bumped when the document is replaced wholesale, so the editor reloads it. */
   docVersion: number;
+  /** Panels that just unlocked, for a brief highlight. */
+  flash: string[];
 
   setDoc(doc: JSONContent): void;
   setCursor(pid: string | null): void;
@@ -59,6 +66,12 @@ export interface StudioState extends Persisted {
   dismiss(recordId: string): void;
   claimAll(): void;
   togglePin(characterId: string): void;
+  setLook(characterId: string, look: Look): void;
+  toggleAppearanceLock(characterId: string): void;
+  drawCharacter(characterId: string): void;
+  setArtStyle(style: ArtStyle): void;
+  /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
+  setValue(pid: string, characterId: string, kind: 'currency' | 'item', name: string, value: number): void;
   merge(from: string, into: string): void;
   setAiStatus(status: AiStatus): void;
   setAiEnabled(on: boolean): void;
@@ -98,7 +111,17 @@ export const useStudio = create<StudioState>()(
         const snap = snapshot(latest);
         const prev = s.seen ?? snapshot(fold(s.project, s.manuscript));
         const toasts = [...systemToasts, ...unlockToasts(prev, snap, patch.project, latest)];
-        set({ ...patch, seen: snap, toasts: [...s.toasts, ...toasts.map((t) => ({ ...t, id: ++toastSeq }))].slice(-6) });
+        const earned = ACHIEVEMENTS.filter((a) => !s.achievements.includes(a.id) && a.test({ project: patch.project, manuscript, state: latest }));
+        for (const a of earned) toasts.push({ kind: 'ach', head: 'Achievement', body: a.name });
+        const flash = snap.panels.filter((p) => !prev.panels.includes(p));
+        set({
+          ...patch,
+          seen: snap,
+          achievements: earned.length ? [...s.achievements, ...earned.map((a) => a.id)] : s.achievements,
+          flash: flash.length ? [...s.flash, ...flash] : s.flash,
+          toasts: [...s.toasts, ...toasts.map((t) => ({ ...t, id: ++toastSeq }))].slice(-6),
+        });
+        if (flash.length) setTimeout(() => set({ flash: get().flash.filter((f) => !flash.includes(f)) }), 2600);
       };
 
       return {
@@ -107,6 +130,8 @@ export const useStudio = create<StudioState>()(
         collapsed: [],
         aiEnabled: true,
         accessCode: '',
+        achievements: [],
+        flash: [],
         cursorPid: null,
         scrub: null,
         jumpTo: null,
@@ -178,6 +203,39 @@ export const useStudio = create<StudioState>()(
           c.pinned = !c.pinned;
           commit({ project });
         },
+        setLook(characterId, look) {
+          const project = structuredClone(get().project);
+          const c = project.characters[characterId];
+          if (!c) return;
+          c.look = look;
+          set({ project });
+        },
+        toggleAppearanceLock(characterId) {
+          const project = structuredClone(get().project);
+          const c = project.characters[characterId];
+          if (!c) return;
+          c.lockedAppearance = !c.lockedAppearance;
+          commit({ project });
+        },
+        drawCharacter(characterId) {
+          const project = structuredClone(get().project);
+          const c = project.characters[characterId];
+          if (!c) return;
+          c.drawn = true;
+          set({ project });
+        },
+        setArtStyle(style) {
+          set({ project: { ...get().project, art: { style } } });
+        },
+        setValue(pid, characterId, kind, name, value) {
+          const project = structuredClone(get().project);
+          const change =
+            kind === 'currency'
+              ? ({ kind: 'currency', character: characterId, currency: name, delta: 0, set: value } as const)
+              : ({ kind: 'item', character: characterId, item: name, delta: 0, set: value } as const);
+          project.records.push({ id: newId(), paragraphId: pid, textHash: '', source: 'author', status: 'applied', change });
+          commit({ project });
+        },
         merge(from, into) {
           const project = structuredClone(get().project);
           applyMerge(project.characters, from, into);
@@ -235,7 +293,7 @@ export const useStudio = create<StudioState>()(
       name: 'questwright:studio',
       version: 1,
       storage: createJSONStorage(() => localStorage),
-      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, aiEnabled: s.aiEnabled, accessCode: s.accessCode }),
+      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements }),
       merge: (persisted, current) => {
         const p = persisted as Partial<Persisted> | undefined;
         if (!p?.project || !p.doc) return current;

@@ -5,14 +5,31 @@ export interface PlacedParagraph extends Paragraph {
   chapterIndex: number;
   /** Position within its chapter, starting at 0. */
   number: number;
+  /** Book position and the chapter's position within that book, when the manuscript has books. */
+  bookIndex?: number;
+  bookChapter?: number;
 }
 
-/** Every paragraph in reading order, with its global and in-chapter position. */
+const flatCache = new WeakMap<Manuscript, PlacedParagraph[]>();
+
+/** Every paragraph in reading order, with its global and in-chapter position. Cached per manuscript. */
 export function flatten(m: Manuscript): PlacedParagraph[] {
+  const hit = flatCache.get(m);
+  if (hit) return hit;
   const out: PlacedParagraph[] = [];
-  m.chapters.forEach((ch, chapterIndex) =>
-    ch.paragraphs.forEach((p, number) => out.push({ ...p, index: out.length, chapterIndex, number })),
-  );
+  let bookIndex = -1;
+  let bookChapter = 0;
+  let lastBook: string | undefined;
+  m.chapters.forEach((ch, chapterIndex) => {
+    if (ch.book !== undefined && ch.book !== lastBook) {
+      bookIndex++;
+      bookChapter = 0;
+      lastBook = ch.book;
+    } else if (ch.book !== undefined) bookChapter++;
+    const where = ch.book !== undefined ? { bookIndex, bookChapter } : {};
+    ch.paragraphs.forEach((p, number) => out.push({ ...p, index: out.length, chapterIndex, number, ...where }));
+  });
+  flatCache.set(m, out);
   return out;
 }
 
@@ -20,8 +37,9 @@ export function indexById(m: Manuscript): Map<string, PlacedParagraph> {
   return new Map(flatten(m).map((p) => [p.id, p]));
 }
 
-/** "Ch 3 ¶2" style label for a paragraph position. */
-export function label(p: { chapterIndex: number; number: number }): string {
+/** "Ch 3 ¶2" style label for a paragraph position; "Bk 2 · Ch 3 ¶2" in a series. */
+export function label(p: { chapterIndex: number; number: number; bookIndex?: number; bookChapter?: number }): string {
+  if (p.bookIndex !== undefined) return `Bk ${p.bookIndex + 1} · Ch ${(p.bookChapter ?? 0) + 1} ¶${p.number + 1}`;
   return `Ch ${p.chapterIndex + 1} ¶${p.number + 1}`;
 }
 

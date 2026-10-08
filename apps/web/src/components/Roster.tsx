@@ -1,6 +1,9 @@
 'use client';
 
 import { label, type PlacedParagraph, type WorldState } from '@questwright/engine';
+import { Figure2D } from '@/figure/Figure2D';
+import { gearFor } from '@/figure/gear';
+import { lookOf } from '@/figure/look';
 import { useStudio } from '@/lib/store';
 
 export function Roster({ view, flat }: { view: WorldState; flat: PlacedParagraph[] }) {
@@ -8,6 +11,9 @@ export function Roster({ view, flat }: { view: WorldState; flat: PlacedParagraph
   const setTab = useStudio((s) => s.setTab);
   const togglePin = useStudio((s) => s.togglePin);
   const merge = useStudio((s) => s.merge);
+  const draw = useStudio((s) => s.drawCharacter);
+  const protagonistId = useStudio((s) => s.project.protagonistId);
+  const style = useStudio((s) => s.project.art?.style ?? 'painterly');
   const sheets = Object.values(view.sheets).sort((a, b) => (a.firstSeen ?? 0) - (b.firstSeen ?? 0));
   const others = (id: string) => Object.values(characters).filter((c) => c.id !== id && !c.mergedInto);
 
@@ -23,6 +29,9 @@ export function Roster({ view, flat }: { view: WorldState; flat: PlacedParagraph
           if (!c) return null;
           return (
             <div className="rc" key={c.id}>
+              <div className="rc-fig">
+                <Figure2D look={lookOf(c, protagonistId)} features={gearFor(s)} style={style} silhouette={!s.promoted && !c.drawn} label={s.promoted || c.drawn ? `${c.name}` : `${c.name}, not drawn yet`} />
+              </div>
               <b>{c.name}</b>
               <small>{c.role ? `${c.role} · ` : ''}first seen {s.firstSeen !== undefined ? label(flat[s.firstSeen]!) : '—'}</small>
               {c.description && <small>{c.description}</small>}
@@ -34,6 +43,7 @@ export function Roster({ view, flat }: { view: WorldState; flat: PlacedParagraph
                 ) : (
                   <button className="mini" onClick={() => togglePin(c.id)}>Pin to tabs</button>
                 )}
+                {!s.promoted && !c.drawn && <button className="mini" onClick={() => draw(c.id)}>Draw character</button>}
               </div>
               <label>
                 <small>Same person as </small>

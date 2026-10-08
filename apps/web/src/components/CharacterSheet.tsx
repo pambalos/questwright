@@ -1,42 +1,78 @@
 'use client';
 
-import { FREE_POINTS, label, type ContinuityWarning, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
-import type { ReactNode } from 'react';
+import { FREE_POINTS, label, type ArtStyle, type ContinuityWarning, type HairStyle, type Look, type Outfit, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Figure3D } from '@/figure/Figure3D';
+import { gearFor } from '@/figure/gear';
+import { lookOf } from '@/figure/look';
 import { useStudio } from '@/lib/store';
 
 const CORE_STATS = new Set(['Level', FREE_POINTS]);
 const rar = (r?: string) => `var(--r-${r ?? 'common'})`;
 const initials = (s: string) => s.split(/\s+/).map((w) => w[0]).join('').slice(0, 3);
+const OUTFITS: Outfit[] = ['tunic', 'coat', 'robe', 'cloak', 'armor'];
+const HAIR: HairStyle[] = ['short', 'spiky', 'long', 'bald', 'hood'];
 
 interface Props {
   sheet: Sheet;
   world: WorldDefs;
   warnings: ContinuityWarning[];
   flat: PlacedParagraph[];
+  /** Paragraph the panel is showing; author corrections are recorded there. */
+  atPid: string | null;
   onJump(pid: string): void;
 }
 
-export function CharacterSheet({ sheet, world, warnings, flat, onJump }: Props) {
+export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: Props) {
   const character = useStudio((s) => s.project.characters[sheet.characterId]);
+  const style: ArtStyle = useStudio((s) => s.project.art?.style ?? 'painterly');
   const togglePin = useStudio((s) => s.togglePin);
-  const name = character?.name ?? sheet.characterId;
+  const toggleLock = useStudio((s) => s.toggleAppearanceLock);
+  const setLook = useStudio((s) => s.setLook);
+  const setValue = useStudio((s) => s.setValue);
+  const [hover, setHover] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const features = useMemo(() => gearFor(sheet), [sheet]);
+  const protagonistId = useStudio((s) => s.project.protagonistId);
+  const look = useMemo(() => (character ? lookOf(character, protagonistId) : null), [character, protagonistId]);
+  if (!character || !look) return null;
+
+  const name = character.name;
   const at = (i?: number) => (i === undefined ? '—' : label(flat[i]!));
   const slots = world.slots;
-  const left = slots.filter((_, i) => i % 2 === 0);
-  const right = slots.filter((_, i) => i % 2 === 1);
   const pad = (xs: (string | null)[]) => [...xs, ...Array(Math.max(0, 4 - xs.length)).fill(null)] as (string | null)[];
+  const left = pad(slots.filter((_, i) => i % 2 === 0));
+  const right = pad(slots.filter((_, i) => i % 2 === 1));
   const tag = [sheet.stats.Level !== undefined ? `Level ${sheet.stats.Level}` : null, sheet.className].filter(Boolean).join(' · ');
-
+  const correct = (kind: 'currency' | 'item', item: string, current: number) => {
+    if (!atPid) return;
+    const raw = window.prompt(`Set ${name}'s ${item} as of this point in the story`, String(current));
+    if (raw === null) return;
+    const n = Number(raw.trim());
+    if (Number.isFinite(n)) setValue(atPid, sheet.characterId, kind, item, n);
+  };
   const tile = (slot: string | null, i: number) => {
     if (!slot) return <div key={`l${i}`} className="tile locked" title="Undiscovered slot. It appears when the story equips something new.">?</div>;
     const it = sheet.equipment[slot];
     return (
-      <div key={slot} className={`tile${it ? '' : ' empty'}`} title={`${slot}: ${it ? it.item : 'empty'}`} style={it ? ({ '--rar': rar(it.rarity) } as React.CSSProperties) : undefined}>
+      <div
+        key={slot}
+        data-slot={slot}
+        tabIndex={0}
+        className={`tile${it ? '' : ' empty'}`}
+        title={`${slot}: ${it ? it.item : 'empty'}`}
+        style={it ? ({ '--rar': rar(it.rarity) } as React.CSSProperties) : undefined}
+        onMouseEnter={() => setHover(slot)}
+        onMouseLeave={() => setHover(null)}
+        onFocus={() => setHover(slot)}
+        onBlur={() => setHover(null)}
+      >
         {it && <b>{initials(it.item)}</b>}
         <small>{slot}</small>
       </div>
     );
   };
+  const set = (patch: Partial<Look>) => setLook(sheet.characterId, { ...look, ...patch });
 
   return (
     <>
@@ -46,34 +82,50 @@ export function CharacterSheet({ sheet, world, warnings, flat, onJump }: Props) 
           {tag && <div className="ep">{tag}</div>}
         </div>
         <div className="doll-grid">
-          <div className="scol">{pad(left).map(tile)}</div>
-          <div className="figure" title="The 3D figure arrives in the next milestone.">
-            <svg viewBox="0 0 120 220" role="img" aria-label={`${name}, figure not drawn yet`}>
-              <ellipse cx="60" cy="212" rx="34" ry="6" fill="#000" opacity=".45" />
-              <path d="M38 82 Q60 72 82 82 L86 150 L76 150 L74 206 L64 206 L60 156 L56 206 L46 206 L44 150 L34 150 Z" fill="#30344a" />
-              <circle cx="60" cy="52" r="18" fill="#30344a" />
-              <text x="60" y="132" textAnchor="middle" fontFamily="Cinzel, serif" fontSize="22" fill="#5c6380">{initials(name)}</text>
-            </svg>
+          <div className="scol">{left.map(tile)}</div>
+          <div className="fig3d">
+            <Figure3D id={sheet.characterId} look={look} features={features} style={style} highlight={hover} label={`${name}, wearing what the story has given them`} />
           </div>
-          <div className="scol">{pad(right).map(tile)}</div>
+          <div className="scol">{right.map(tile)}</div>
         </div>
         <div className="card-info">
-          {character?.description && <p>{character.description}</p>}
-          {!!character?.aliases.length && <div className="meta">Also called: {character.aliases.join(', ')}</div>}
+          {character.description && <p>{character.description}</p>}
+          {!!character.aliases.length && <div className="meta">Also called: {character.aliases.join(', ')}</div>}
           <div className="meta">
-            {character?.role ? `${character.role} · ` : ''}first seen {at(sheet.firstSeen)} · last seen {at(sheet.lastSeen)}
-            {sheet.appearance.version > 1 && ` · appearance v${sheet.appearance.version}: ${sheet.appearance.note}`}
+            {character.role ? `${character.role} · ` : ''}first seen {at(sheet.firstSeen)} · last seen {at(sheet.lastSeen)}
           </div>
           <div className="meta">
-            <button className={`mini${character?.pinned ? ' on' : ''}`} aria-pressed={!!character?.pinned} onClick={() => togglePin(sheet.characterId)}>
-              {character?.pinned ? 'Pinned to tabs' : 'Pin to tabs'}
+            Appearance v{sheet.appearance.version}
+            {sheet.appearance.notes.length ? ` · ${sheet.appearance.notes.join(', ')}` : ''}{' '}
+            <button className={`mini${character.lockedAppearance ? ' on' : ''}`} aria-pressed={!!character.lockedAppearance} onClick={() => toggleLock(sheet.characterId)}>
+              {character.lockedAppearance ? 'Look locked' : 'Lock look'}
+            </button>{' '}
+            <button className={`mini${editing ? ' on' : ''}`} aria-expanded={editing} onClick={() => setEditing(!editing)}>Edit look</button>{' '}
+            <button className={`mini${character.pinned ? ' on' : ''}`} aria-pressed={!!character.pinned} onClick={() => togglePin(sheet.characterId)}>
+              {character.pinned ? 'Pinned' : 'Pin to tabs'}
             </button>
           </div>
+          {editing && (
+            <div className="look">
+              <label>Outfit<select value={look.outfit} onChange={(e) => set({ outfit: e.target.value as Outfit })}>{OUTFITS.map((o) => <option key={o}>{o}</option>)}</select></label>
+              <label>Hair<select value={look.hair} onChange={(e) => set({ hair: e.target.value as HairStyle })}>{HAIR.map((o) => <option key={o}>{o}</option>)}</select></label>
+              <label>Skin<input type="color" value={look.skin} onChange={(e) => set({ skin: e.target.value })} /></label>
+              <label>Hair colour<input type="color" value={look.hairColor} onChange={(e) => set({ hairColor: e.target.value })} /></label>
+              <label>Clothes<input type="color" value={look.cloth} onChange={(e) => set({ cloth: e.target.value })} /></label>
+              <label>Accent<input type="color" value={look.accent} onChange={(e) => set({ accent: e.target.value })} /></label>
+              <label>Height<input type="range" min={0.85} max={1.15} step={0.01} value={look.build} onChange={(e) => set({ build: Number(e.target.value) })} /></label>
+            </div>
+          )}
         </div>
       </section>
+      {sheet.unconfirmed.length > 0 && (
+        <p className="note unconfirmed-note">
+          Values marked ? were carried in from books that were not fully read. Click a value to confirm or correct it.
+        </p>
+      )}
       {sheet.panels.filter((p) => p !== 'equipment').map((p) => (
         <Section key={p} id={`${sheet.characterId}:${p}`} title={TITLES[p]} count={count(sheet, p)}>
-          {body(sheet, p, warnings.filter((w) => w.characterId === sheet.characterId), flat, onJump)}
+          {body(sheet, p, warnings.filter((w) => w.characterId === sheet.characterId), onJump, correct)}
         </Section>
       ))}
     </>
@@ -91,7 +143,10 @@ function count(s: Sheet, p: PanelKey): string | undefined {
   return undefined;
 }
 
-function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], flat: PlacedParagraph[], onJump: (pid: string) => void): ReactNode {
+type Correct = (kind: 'currency' | 'item', name: string, current: number) => void;
+
+function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid: string) => void, correct: Correct): ReactNode {
+  const unsure = (key: string) => s.unconfirmed.includes(key);
   switch (p) {
     case 'stats': {
       const stats = Object.entries(s.stats).filter(([k]) => !CORE_STATS.has(k));
@@ -112,11 +167,11 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], flat: Placed
       return (
         <div className="bag">
           {Object.entries(s.items).map(([n, v]) => (
-            <div key={n} className="cell" title={n}>
+            <button key={n} className={`cell${unsure(`item:${n}`) ? ' unsure' : ''}`} title={`${n}. Click to correct the count.`} onClick={() => correct('item', n, v.count)}>
               <span className="glyph" style={{ color: rar(v.rarity) }}>{initials(n)}</span>
               <span className="nm">{n}</span>
-              <span className="qty">{v.count}</span>
-            </div>
+              <span className="qty">{unsure(`item:${n}`) ? '?' : ''}{v.count}</span>
+            </button>
           ))}
           {!Object.keys(s.items).length && <p className="note">Empty for now.</p>}
         </div>
@@ -143,7 +198,10 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], flat: Placed
                   <span className="coin" />{n}
                   {v < 0 && w && <button className="warn-link" onClick={() => onJump(w.paragraphId)}>{w.message}. Check that scene.</button>}
                 </span>
-                <span className="val">{v}</span>
+                <button className="val val-btn" title="Click to correct this value" onClick={() => correct('currency', n, v)}>
+                  {unsure(`currency:${n}`) && <span className="unsure-badge">?</span>}
+                  {v}
+                </button>
               </div>
             );
           })}
@@ -159,7 +217,6 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], flat: Placed
     case 'titles':
       return <div className="badges">{s.titles.map((t) => <span key={t} className="badge">{t}</span>)}</div>;
     case 'equipment':
-      void flat;
       return null;
   }
 }
@@ -167,8 +224,9 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], flat: Placed
 function Section({ id, title, count, children }: { id: string; title: string; count?: string; children: ReactNode }) {
   const collapsed = useStudio((s) => s.collapsed.includes(id));
   const toggle = useStudio((s) => s.toggleCollapsed);
+  const flash = useStudio((s) => s.flash.includes(id));
   return (
-    <section className={`pnl${collapsed ? ' collapsed' : ''}`}>
+    <section className={`pnl${collapsed ? ' collapsed' : ''}${flash ? ' unlocked' : ''}`}>
       <button className="pnl-h" aria-expanded={!collapsed} onClick={() => toggle(id)}>
         {title}
         {count && <span className="cnt">{count}</span>}

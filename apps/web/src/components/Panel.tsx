@@ -2,6 +2,9 @@
 
 import { describeChange, label, type PlacedParagraph, type WorldState } from '@questwright/engine';
 import { useEffect } from 'react';
+import { Figure2D } from '@/figure/Figure2D';
+import { gearFor } from '@/figure/gear';
+import { lookOf } from '@/figure/look';
 import { useStudio } from '@/lib/store';
 import { CharacterSheet } from './CharacterSheet';
 import { Roster } from './Roster';
@@ -18,6 +21,8 @@ export function Panel({ view, latest, flat, viewIndex }: Props) {
   const tab = useStudio((s) => s.tab);
   const setTab = useStudio((s) => s.setTab);
   const characters = useStudio((s) => s.project.characters);
+  const style = useStudio((s) => s.project.art?.style ?? 'painterly');
+  const protagonistId = useStudio((s) => s.project.protagonistId);
   const scrub = useStudio((s) => s.scrub);
   const setScrub = useStudio((s) => s.setScrub);
   const jump = useStudio((s) => s.jump);
@@ -30,10 +35,11 @@ export function Panel({ view, latest, flat, viewIndex }: Props) {
     <aside className="hud" aria-label="Character panel">
       <div className="tabs" role="tablist">
         {tabs.map((s) => {
-          const name = characters[s.characterId]?.name ?? s.characterId;
+          const c = characters[s.characterId];
+          const name = c?.name ?? s.characterId;
           return (
             <button key={s.characterId} role="tab" aria-selected={tab === s.characterId} className={`tab${tab === s.characterId ? ' on' : ''}`} onClick={() => setTab(s.characterId)}>
-              <span className="crest" aria-hidden="true">{name.charAt(0)}</span>
+              {c ? <Figure2D crop look={lookOf(c, protagonistId)} features={gearFor(s)} style={style} label="" /> : null}
               {name}
             </button>
           );
@@ -58,7 +64,7 @@ export function Panel({ view, latest, flat, viewIndex }: Props) {
         ) : tab === 'world' ? (
           <WorldTab world={view.world} />
         ) : sheet?.promoted ? (
-          <CharacterSheet sheet={sheet} world={view.world} warnings={view.warnings} flat={flat} onJump={jump} />
+          <CharacterSheet sheet={sheet} world={view.world} warnings={view.warnings} flat={flat} atPid={at?.id ?? null} onJump={jump} />
         ) : (
           <div className="empty-tab">
             {characters[tab]?.name ?? 'This character'} has no sheet yet{at ? ` at ${label(at)}` : ''}.

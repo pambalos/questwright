@@ -8,16 +8,24 @@ export function blockText(node: JSONContent): string {
   return (node.content ?? []).map((c) => (c.type === 'text' ? (c.text ?? '') : c.type === 'hardBreak' ? '\n' : blockText(c))).join('');
 }
 
-/** Headings start chapters; every paragraph with an id is a tracked paragraph. */
+/**
+ * A level-1 heading starts a book, a level-2 heading starts a chapter; every
+ * paragraph with an id is a tracked paragraph.
+ */
 export function docToManuscript(doc: JSONContent): Manuscript {
   const chapters: Manuscript['chapters'] = [];
+  let book: string | undefined;
   const current = () => {
-    if (!chapters.length) chapters.push({ id: 'ch1', title: 'Untitled chapter', paragraphs: [] });
+    const last = chapters[chapters.length - 1];
+    if (last && last.book === book) return last;
+    chapters.push({ id: `ch${chapters.length + 1}`, title: 'Untitled chapter', ...(book !== undefined ? { book } : {}), paragraphs: [] });
     return chapters[chapters.length - 1]!;
   };
   const walk = (nodes: JSONContent[]) => {
     for (const n of nodes) {
-      if (n.type === 'heading') chapters.push({ id: `ch${chapters.length + 1}`, title: blockText(n) || 'Untitled chapter', paragraphs: [] });
+      if (n.type === 'heading' && n.attrs?.level === 1) book = blockText(n) || 'Untitled book';
+      else if (n.type === 'heading')
+        chapters.push({ id: `ch${chapters.length + 1}`, title: blockText(n) || 'Untitled chapter', ...(book !== undefined ? { book } : {}), paragraphs: [] });
       else if (n.type === 'paragraph') {
         const pid = n.attrs?.pid as string | undefined;
         if (pid) current().paragraphs.push({ id: pid, text: blockText(n) });
@@ -31,7 +39,12 @@ export function docToManuscript(doc: JSONContent): Manuscript {
 /** Builds an editor document from a manuscript, keeping paragraph ids. */
 export function manuscriptToDoc(m: Manuscript): JSONContent {
   const content: JSONContent[] = [];
+  let book: string | undefined;
   for (const ch of m.chapters) {
+    if (ch.book !== undefined && ch.book !== book) {
+      book = ch.book;
+      content.push({ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: ch.book }] });
+    }
     content.push({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: ch.title }] });
     for (const p of ch.paragraphs) {
       const parts = p.text.split('\n');

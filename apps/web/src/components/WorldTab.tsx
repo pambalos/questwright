@@ -1,6 +1,8 @@
 'use client';
 
-import type { WorldDefs } from '@questwright/engine';
+import type { ArtStyle, WorldDefs } from '@questwright/engine';
+import { STYLE_LABEL } from '@/figure/look';
+import { useStudio } from '@/lib/store';
 
 const SECTIONS: { key: keyof WorldDefs; title: string }[] = [
   { key: 'currencies', title: 'Currencies' },
@@ -11,6 +13,8 @@ const SECTIONS: { key: keyof WorldDefs; title: string }[] = [
 ];
 
 export function WorldTab({ world }: { world: WorldDefs }) {
+  const style = useStudio((s) => s.project.art?.style ?? 'painterly');
+  const setStyle = useStudio((s) => s.setArtStyle);
   return (
     <>
       <p className="note">The rules of this story&apos;s system, built from what the manuscript has introduced so far. Every character shares these definitions.</p>
@@ -24,6 +28,14 @@ export function WorldTab({ world }: { world: WorldDefs }) {
           )}
         </div>
       ))}
+      <div className="codex">
+        <h4>Character art style</h4>
+        <div className="chips">
+          {(Object.keys(STYLE_LABEL) as ArtStyle[]).map((k) => (
+            <button key={k} className={`chip${style === k ? ' sel' : ''}`} aria-pressed={style === k} onClick={() => setStyle(k)}>{STYLE_LABEL[k]}</button>
+          ))}
+        </div>
+      </div>
     </>
   );
 }

@@ -7,7 +7,7 @@ import { ids, parsedProject } from './helpers';
 const p4 = SAMPLE.chapters[0]!.paragraphs[3]!;
 
 const reading: Extraction = {
-  characters: [{ name: 'Kael', role: null, description: null, sameAs: null }],
+  characters: [{ name: 'Kael', role: null, description: null, sameAs: null, look: null }],
   changes: [
     { kind: 'equip', character: 'Kael', name: 'Iron Dagger', amount: null, slot: 'Belt', rarity: null, quote: 'slid the dagger into his belt' },
     { kind: 'gain_currency', character: 'he', name: 'Gold', amount: 20, slot: null, rarity: null, quote: 'twenty gold' },
@@ -34,12 +34,13 @@ describe('AI extraction contract', () => {
   it('adds new characters and proposes a merge when the text reveals an identity', () => {
     const base = parsedProject(SAMPLE).project;
     const withStranger = applyExtraction(base, 'p7', SAMPLE.chapters[0]!.paragraphs[6]!.text, {
-      characters: [{ name: 'Hooded stranger', role: null, description: 'Watched Kael from the treeline.', sameAs: null }], changes: [],
+      characters: [{ name: 'Hooded stranger', role: null, description: 'Watched Kael from the treeline.', sameAs: null, look: { outfit: 'cloak', hair: 'hood', hairColor: null, clothColor: 'not a colour' } }], changes: [],
     }, ids()).project;
     expect(withStranger.characters['hooded-stranger']?.description).toBe('Watched Kael from the treeline.');
+    expect(withStranger.characters['hooded-stranger']?.lookHints).toEqual({ outfit: 'cloak', hair: 'hood' });
     const p11 = SAMPLE.chapters[1]!.paragraphs[3]!;
     const { project } = applyExtraction(withStranger, 'p11', p11.text, {
-      characters: [{ name: 'Hooded stranger', role: null, description: null, sameAs: 'Lyra' }], changes: [],
+      characters: [{ name: 'Hooded stranger', role: null, description: null, sameAs: 'Lyra', look: null }], changes: [],
     }, ids());
     expect(project.records.find((r) => r.change.kind === 'merge')).toMatchObject({ status: 'proposed', change: { from: 'hooded-stranger', into: 'lyra' } });
   });
