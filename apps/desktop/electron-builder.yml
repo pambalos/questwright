@@ -7,11 +7,9 @@ directories:
 files:
   - dist/**
   - package.json
-extraResources:
-  - from: web
-    to: web
-    filter:
-      - "**/*"
+# The web server (apps/desktop/web) is copied into resources/web by this hook
+# rather than extraResources, which always leaves out node_modules.
+afterPack: scripts/after-pack.cjs
 asar: true
 # No auto-update feed yet.
 publish: null

@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain, net, protocol, safeStorage, shell, utilityProcess, type UtilityProcess } from 'electron';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
+import { format } from 'node:util';
 
 /**
  * Questwright desktop: runs the web app's own server privately on this machine
@@ -21,6 +22,19 @@ let port = 0;
 let win: BrowserWindow | null = null;
 
 const settingsPath = () => join(app.getPath('userData'), 'settings.json');
+const logPath = () => join(app.getPath('logs'), 'main.log');
+
+/** Packaged builds have no console on Windows, so everything also goes to a log file. */
+function log(...args: unknown[]) {
+  const line = `${new Date().toISOString()} ${format(...args)}`;
+  console.log(line);
+  try {
+    mkdirSync(app.getPath('logs'), { recursive: true });
+    appendFileSync(logPath(), `${line}\n`);
+  } catch {
+    /* logging must never take the app down */
+  }
+}
 
 interface Settings {
   /** The API key, encrypted with the operating system's keychain when available. */
@@ -75,9 +89,10 @@ function serverScript(): string {
   return join(base, 'apps/web/server.js');
 }
 
-async function waitForServer(p: number, ms = 30000) {
+async function waitForServer(p: number, gaveUp: () => boolean, ms = 60000) {
   const until = Date.now() + ms;
   while (Date.now() < until) {
+    if (gaveUp()) throw new Error('The Questwright server stopped while starting.');
     try {
       const res = await net.fetch(`http://127.0.0.1:${p}/api/status`);
       if (res.ok) return;
@@ -95,7 +110,8 @@ async function startServer() {
   if (!existsSync(script)) throw new Error(`Missing web build at ${script}. Run "npm run desktop:stage" first.`);
   port = await freePort();
   const key = apiKey();
-  server = utilityProcess.fork(script, [], {
+  log(`starting server ${script} on port ${port}`);
+  const child = utilityProcess.fork(script, [], {
     cwd: join(script, '..'),
     stdio: 'pipe',
     serviceName: 'Questwright server',
@@ -108,15 +124,35 @@ async function startServer() {
       ...(key ? { ANTHROPIC_API_KEY: key } : {}),
     },
   });
-  server.stdout?.on('data', (d) => process.stdout.write(`[server] ${d}`));
-  server.stderr?.on('data', (d) => process.stderr.write(`[server] ${d}`));
-  await waitForServer(port);
+  server = child;
+  child.stdout?.on('data', (d) => log(`[server] ${String(d).trimEnd()}`));
+  child.stderr?.on('data', (d) => log(`[server:err] ${String(d).trimEnd()}`));
+  let exited: number | null = null;
+  child.once('exit', (code) => {
+    exited = code;
+    log(`server exited with code ${code}`);
+    if (server === child) server = null;
+  });
+  await waitForServer(port, () => exited !== null);
+  log('server ready');
 }
 
 function stopServer() {
   server?.kill();
   server = null;
 }
+
+/** A self-contained page shown while the server starts, or if it cannot. */
+function statusPage(title: string, detail: string): string {
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  const html = `<!doctype html><meta charset="utf-8"><title>Questwright</title>
+<style>body{margin:0;height:100vh;display:grid;place-items:center;background:#eceff5;color:#1c2333;font:15px system-ui,sans-serif}
+main{text-align:center;max-width:560px;padding:24px}h1{font-size:22px;margin:0 0 8px}p{margin:0;color:#4a5368;white-space:pre-wrap;word-break:break-word}</style>
+<main><h1>${esc(title)}</h1><p>${esc(detail)}</p></main>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+let serverReady: Promise<void> = Promise.resolve();
 
 async function createWindow() {
   win = new BrowserWindow({
@@ -134,7 +170,8 @@ async function createWindow() {
       nodeIntegration: false,
     },
   });
-  win.once('ready-to-show', () => win?.show());
+  const w = win;
+  w.once('ready-to-show', () => w.show());
   // Links to the web open in the default browser; the window only ever shows the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) void shell.openExternal(url);
@@ -146,7 +183,14 @@ async function createWindow() {
       if (/^https?:/.test(url)) void shell.openExternal(url);
     }
   });
-  await win.loadURL(`${ORIGIN}/`);
+  await w.loadURL(statusPage('Questwright', 'Starting…'));
+  try {
+    await serverReady;
+  } catch (e) {
+    if (!w.isDestroyed()) await w.loadURL(statusPage('Questwright could not start', `${(e as Error).message}\n\nDetails are in ${logPath()}`));
+    return;
+  }
+  if (!w.isDestroyed()) await w.loadURL(`${ORIGIN}/`);
 }
 
 ipcMain.handle('qw:hasKey', () => Boolean(apiKey()));
@@ -168,11 +212,11 @@ app.whenReady().then(async () => {
     }
     return net.fetch(`http://127.0.0.1:${port}${u.pathname}${u.search}`, init);
   });
-  try {
-    await startServer();
-  } catch (e) {
-    console.error(e);
-  }
+  log(`Questwright ${app.getVersion()} starting (packaged: ${app.isPackaged})`);
+  serverReady = startServer().catch((e: unknown) => {
+    log('server failed to start:', e);
+    throw e;
+  });
   await createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
