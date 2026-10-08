@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain, net, protocol, safeStorage, shell, utilityProcess, type UtilityProcess } from 'electron';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { delimiter, join } from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { delimiter, dirname, join } from 'node:path';
 import { format } from 'node:util';
 
 /**
@@ -240,6 +241,52 @@ ipcMain.handle('qw:setKey', async (_e, key: unknown) => {
   await startServer();
   return true;
 });
+/* ---------- Questwright Studio (the Unreal character creator in /studio) ---------- */
+
+let studio: ChildProcess | null = null;
+const studioFile = () => join(app.getPath('userData'), 'studio', 'character.json');
+
+/** The Unreal editor binary and the studio project, from QW_STUDIO_EDITOR / QW_STUDIO_PROJECT or the usual places. */
+function studioPaths(): { editor: string; project: string } | null {
+  let editor = process.env.QW_STUDIO_EDITOR;
+  if (!editor && process.platform === 'win32') {
+    try {
+      const installed = JSON.parse(readFileSync('C:\\ProgramData\\Epic\\UnrealEngineLauncher\\LauncherInstalled.dat', 'utf8')) as { InstallationList: { AppName: string; InstallLocation: string }[] };
+      const ue = installed.InstallationList.find((i) => i.AppName === 'UE_5.5');
+      if (ue) editor = join(ue.InstallLocation, 'Engine', 'Binaries', 'Win64', 'UnrealEditor.exe');
+    } catch {
+      /* no Epic launcher */
+    }
+  }
+  if (!editor && process.platform === 'darwin') editor = '/Users/Shared/Epic Games/UE_5.5/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor';
+  let project = process.env.QW_STUDIO_PROJECT;
+  // During development the app runs from inside the repository: look upwards for studio/.
+  for (let dir = app.getAppPath(); !project && dir !== dirname(dir); dir = dirname(dir)) {
+    const p = join(dir, 'studio', 'QuestwrightStudio.uproject');
+    if (existsSync(p)) project = p;
+  }
+  return editor && project && existsSync(editor) ? { editor, project } : null;
+}
+
+ipcMain.handle('qw:openStudio', (_e, json: unknown, launch: unknown) => {
+  if (typeof json !== 'string' || json.length > 1_000_000) throw new Error('That is not a character.');
+  JSON.parse(json);
+  mkdirSync(dirname(studioFile()), { recursive: true });
+  writeFileSync(studioFile(), json);
+  // A running studio notices the file change and reloads it.
+  if (studio && studio.exitCode === null) return null;
+  if (launch !== true) return null;
+  const paths = studioPaths();
+  if (!paths) return 'Questwright Studio was not found. It needs Unreal Engine 5.5 and the studio project (see studio/README.md).';
+  log(`starting studio: ${paths.editor} ${paths.project}`);
+  studio = spawn(paths.editor, [paths.project, '-game', '-windowed', '-ResX=1600', '-ResY=900', '-nosplash', `-Character=${studioFile()}`], { stdio: 'ignore' });
+  studio.on('exit', (code) => {
+    log(`studio exited with code ${code}`);
+    studio = null;
+  });
+  return null;
+});
+
 ipcMain.handle('qw:info', () => ({ version: app.getVersion(), platform: process.platform, keyEncrypted: safeStorage.isEncryptionAvailable() }));
 
 app.whenReady().then(async () => {

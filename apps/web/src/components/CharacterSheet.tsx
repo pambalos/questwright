@@ -1,9 +1,11 @@
 'use client';
 
 import { FREE_POINTS, label, slotFor, type Rarity, type ArtStyle, type ContinuityWarning, type HairStyle, type Look, type Outfit, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { studioCharacter } from '@/figure/studio';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
-import { frameFromProse } from '@/figure/vrm/models';
+import { frameFromProse, modelFor } from '@/figure/vrm/models';
+import { desktop } from '@/lib/desktop';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
 import { useStudio } from '@/lib/store';
@@ -13,6 +15,9 @@ const rar = (r?: string) => `var(--r-${r ?? 'common'})`;
 const initials = (s: string) => s.split(/\s+/).map((w) => w[0]).join('').slice(0, 3);
 const OUTFITS: Outfit[] = ['tunic', 'coat', 'robe', 'cloak', 'armor'];
 const HAIR: HairStyle[] = ['short', 'spiky', 'long', 'bald', 'hood'];
+
+/** The character last sent to Questwright Studio, whose file follows the story while the app runs. */
+let liveInStudio: string | null = null;
 
 interface Props {
   sheet: Sheet;
@@ -42,7 +47,21 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
   );
   const protagonistId = useStudio((s) => s.project.protagonistId);
   const look = useMemo(() => (character ? lookOf(character, protagonistId) : null), [character, protagonistId]);
+  const toast = useStudio((s) => s.toast);
+  const studioJson = useMemo(
+    () => (character && look ? JSON.stringify(studioCharacter(character, sheet, look, modelFor(look, character, suggested))) : ''),
+    [character, sheet, look, suggested],
+  );
+  // While the studio shows this character, keep its file in step with the story.
+  useEffect(() => {
+    if (studioJson && liveInStudio === sheet.characterId) void desktop()?.openStudio?.(studioJson, false);
+  }, [studioJson, sheet.characterId]);
   if (!character || !look) return null;
+  const openStudio = async () => {
+    liveInStudio = sheet.characterId;
+    const error = await desktop()?.openStudio?.(studioJson, true);
+    if (error) toast({ kind: 'error', head: 'Studio did not open', body: error });
+  };
 
   const name = character.name;
   const at = (i?: number) => (i === undefined ? '—' : label(flat[i]!));
@@ -119,6 +138,12 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
             <button className={`mini${character.pinned ? ' on' : ''}`} aria-pressed={!!character.pinned} onClick={() => togglePin(sheet.characterId)}>
               {character.pinned ? 'Pinned' : 'Pin to tabs'}
             </button>
+            {desktop()?.openStudio && (
+              <>
+                {' '}
+                <button className="mini" title="Open this character in Questwright Studio, the Unreal character creator" onClick={() => void openStudio()}>Open in Studio</button>
+              </>
+            )}
           </div>
           {editing && (
             <div className="look">
