@@ -4,6 +4,7 @@ import { flatten, fold } from '@questwright/engine';
 import { useMemo } from 'react';
 import { useAiStatus, useExtractor } from '@/lib/extractor';
 import { useStudio } from '@/lib/store';
+import { BookTabs } from './BookTabs';
 import { Editor } from './Editor';
 import { Header } from './Header';
 import { Panel } from './Panel';
@@ -28,6 +29,7 @@ export function Studio() {
   return (
     <div className="app">
       <Header />
+      <BookTabs />
       <div className="main">
         <Editor latest={latest} viewPid={scrub !== null ? flat[scrub]?.id ?? null : null} />
         <Panel view={view} latest={latest} flat={flat} viewIndex={viewIndex} />

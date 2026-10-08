@@ -48,10 +48,6 @@ export function Header() {
     }
   };
 
-  const confirmReplace = (what: string, act: () => void) => {
-    if (window.confirm(`${what} This replaces the book in this browser. Export first if you want to keep it.`)) act();
-  };
-
   return (
     <header className="top">
       <span className="brand">Questwright</span>
@@ -76,8 +72,8 @@ export function Header() {
         <button className="btn" onClick={() => { const c = window.prompt('Access code for AI reading'); if (c !== null) s.setAccessCode(c.trim()); }}>Enter access code</button>
       )}
       <div className="menu">
-        <button className="btn" onClick={() => confirmReplace('Start a new, empty book?', s.newProject)}>New book</button>
-        <button className="btn" onClick={() => confirmReplace('Load the Emberfall sample?', s.loadSample)}>Sample</button>
+        <button className="btn" onClick={s.newProject}>New book</button>
+        <button className="btn" onClick={s.loadSample}>Sample</button>
         <button className="btn" onClick={() => setSeries(true)}>Import series</button>
         <button className="btn" onClick={exportBook}>Export</button>
         <button className="btn" onClick={() => fileRef.current?.click()}>Open export</button>

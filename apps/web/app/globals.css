@@ -23,7 +23,21 @@ button:disabled { cursor: default; opacity: .5; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 [hidden] { display: none !important; }
 
-.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; padding: 12px 16px; }
+.app { height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 12px; padding: 12px 16px; }
+.book-tabs { display: flex; align-items: flex-end; gap: 12px; border-bottom: 1px solid var(--rule); margin-bottom: -4px; min-width: 0; }
+.book-tabs-list { display: flex; align-items: flex-end; gap: 4px; overflow-x: auto; min-width: 0; flex: 1; }
+.book-tab { display: flex; align-items: center; border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; color: var(--ink-dim); flex-shrink: 0; }
+.book-tab:hover { background: var(--paper); }
+.book-tab.active { background: var(--paper); color: var(--ink); border-color: var(--rule); box-shadow: inset 0 2px 0 var(--gold); margin-bottom: -1px; padding-bottom: 1px; }
+.book-tab button { background: none; border: none; color: inherit; font-size: 13px; padding: 6px 4px 6px 12px; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-tab.active button:first-child { font-weight: 600; }
+.book-tab .close { padding: 2px 8px 2px 4px; font-size: 15px; line-height: 1; opacity: .45; }
+.book-tab .close:hover { opacity: 1; color: var(--bad); }
+.book-tab-new { background: none; border: 1px dashed var(--rule); border-radius: 6px; color: var(--ink-dim); font-size: 15px; line-height: 1; padding: 3px 9px; margin: 0 0 5px 4px; flex-shrink: 0; }
+.book-tab-new:hover { border-color: var(--ink-dim); color: var(--ink); }
+.save-state { font-size: 12px; color: var(--ink-dim); padding-bottom: 7px; white-space: nowrap; }
+.save-state.saving { color: var(--gold); }
+.save-state.error { color: var(--bad); }
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 .brand { font-family: var(--f-display); font-size: 20px; font-weight: 700; letter-spacing: .04em; }
 .title-input { background: none; border: 1px solid transparent; border-radius: 6px; padding: 3px 6px; color: var(--ink-dim); min-width: 0; width: 16em; }

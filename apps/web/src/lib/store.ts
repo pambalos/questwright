@@ -25,7 +25,7 @@ import {
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { BLANK_DOC, docToManuscript, manuscriptToDoc } from './doc';
-import { idbPersist } from './idb-storage';
+import { idbDelete, idbGet, idbPersist, idbSet } from './idb-storage';
 import { newId } from './ids';
 import { ACHIEVEMENTS } from './achievements';
 import { snapshot, unlockToasts, type Snapshot, type Toast } from './unlocks';
@@ -39,11 +39,31 @@ export interface AiBackend {
   signedOut?: boolean;
 }
 
+/** A book in the library, shown as a tab. Its id is its project id. */
+export interface BookMeta {
+  id: string;
+  title: string;
+  updatedAt: number;
+}
+
+/** What is kept for each book that is not open. The open book lives in the studio save. */
+interface SavedBook {
+  project: Project;
+  doc: JSONContent;
+  tab: string;
+  collapsed: string[];
+}
+
+const bookKey = (id: string) => `questwright:book:${id}`;
+const metaOf = (p: Project): BookMeta => ({ id: p.id, title: p.title, updatedAt: Date.now() });
+
 interface Persisted {
   project: Project;
   doc: JSONContent;
   tab: string;
   collapsed: string[];
+  /** Every book in the library, the open one included. */
+  books: BookMeta[];
   aiEnabled: boolean;
   accessCode: string;
   /** Author achievements earned in this browser. */
@@ -105,8 +125,13 @@ export interface StudioState extends Persisted {
   finishSkim(chapterId: string, result: Skim): void;
   failSkim(chapterId: string, message: string): void;
   startSkim(chapterId: string): void;
+  /** Opens a new, empty book in its own tab. */
   newProject(): void;
+  /** Opens an exported book in its own tab. */
   importProject(project: Project, doc: JSONContent): void;
+  switchBook(id: string): Promise<void>;
+  /** Deletes a book for good; the open book is swapped for another first. */
+  deleteBook(id: string): Promise<void>;
   toast(t: Omit<Toast, 'id'>): void;
   dropToast(id: number): void;
 }
@@ -173,8 +198,28 @@ export const useStudio = create<StudioState>()(
         if (flash.length) setTimeout(() => set({ flash: get().flash.filter((f) => !flash.includes(f)) }), 2600);
       };
 
+      /** Puts the open book away in its own save and opens `book` in its place, as a tab. */
+      const openBook = (book: SavedBook) => {
+        const s = get();
+        const away: SavedBook = { project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed };
+        void idbSet(bookKey(s.project.id), away).catch(() =>
+          get().toast({ kind: 'error', head: 'Could not save a book', body: `“${away.project.title}” could not be put away. Export it to keep a copy.` }),
+        );
+        const d = derive(book.project, book.doc);
+        const books = s.books.map((b) => (b.id === s.project.id ? metaOf(s.project) : b));
+        if (!books.some((b) => b.id === d.project.id)) books.push(metaOf(d.project));
+        set({
+          project: d.project, doc: book.doc, manuscript: d.manuscript, queue: d.queue, tab: book.tab, collapsed: book.collapsed, books,
+          scrub: null, cursorPid: null, jumpTo: null, skimming: null, failed: {}, inFlight: [],
+          seen: snapshot(fold(d.project, d.manuscript)), docVersion: s.docVersion + 1,
+        });
+      };
+      const fresh = (project: Project, doc: JSONContent): SavedBook => ({ project, doc, tab: 'roster', collapsed: [] });
+
+      const initial = sampleState();
       return {
-        ...sampleState(),
+        ...initial,
+        books: [metaOf(initial.project)],
         tab: 'roster',
         collapsed: [],
         aiEnabled: true,
@@ -223,7 +268,8 @@ export const useStudio = create<StudioState>()(
           set({ collapsed: c.includes(key) ? c.filter((k) => k !== key) : [...c, key] });
         },
         setTitle(title) {
-          set({ project: { ...get().project, title } });
+          const s = get();
+          set({ project: { ...s.project, title }, books: s.books.map((b) => (b.id === s.project.id ? { ...b, title } : b)) });
         },
         claim(recordId) {
           const project = structuredClone(get().project);
@@ -353,15 +399,11 @@ export const useStudio = create<StudioState>()(
             if (first) base.window = { startParagraphId: first };
             if (skim) base.skimPending = archive.chapters.filter((c) => c.paragraphs.length).map((c) => c.id);
           }
-          const doc = manuscriptToDoc(window);
-          const d = derive(base, doc);
+          openBook(fresh(base, manuscriptToDoc(window)));
+          const d = get();
           const latest = fold(d.project, d.manuscript);
           const flat = flatten(d.manuscript);
           const startAt = first ? flat.find((p) => p.id === first) : undefined;
-          set({
-            project: d.project, doc, manuscript: d.manuscript, queue: d.queue, tab: 'roster', scrub: null, cursorPid: null,
-            seen: snapshot(latest), failed: {}, inFlight: [], docVersion: get().docVersion + 1,
-          });
           return {
             books: books.length,
             tracked: books.length - cut,
@@ -392,15 +434,35 @@ export const useStudio = create<StudioState>()(
           get().toast({ kind: 'error', head: 'Could not skim a chapter', body: message });
         },
         loadSample() {
-          set({ ...sampleState(), tab: 'roster', scrub: null, cursorPid: null, seen: null, failed: {}, inFlight: [], docVersion: get().docVersion + 1 });
+          const { project, doc } = sampleState();
+          openBook(fresh(project, doc));
         },
         newProject() {
-          const d = derive(emptyProject(newId(), 'Untitled book'), BLANK_DOC);
-          set({ project: d.project, doc: BLANK_DOC, manuscript: d.manuscript, queue: d.queue, tab: 'roster', scrub: null, cursorPid: null, seen: null, failed: {}, inFlight: [], docVersion: get().docVersion + 1 });
+          openBook(fresh(emptyProject(newId(), 'Untitled book'), BLANK_DOC));
         },
         importProject(project, doc) {
-          const d = derive(project, doc);
-          set({ project: d.project, doc, manuscript: d.manuscript, queue: d.queue, tab: 'roster', scrub: null, cursorPid: null, seen: null, failed: {}, inFlight: [], docVersion: get().docVersion + 1 });
+          // Opening the same export twice makes a second copy rather than overwriting the first.
+          const id = get().books.some((b) => b.id === project.id) ? newId() : project.id;
+          openBook(fresh({ ...project, id }, doc));
+        },
+        async switchBook(id) {
+          if (id === get().project.id) return;
+          const saved = await idbGet<SavedBook>(bookKey(id)).catch(() => undefined);
+          if (!saved?.project || !saved.doc) {
+            get().toast({ kind: 'error', head: 'Could not open that book', body: 'Its save was not found in this app.' });
+            return;
+          }
+          openBook(saved);
+        },
+        async deleteBook(id) {
+          if (id === get().project.id) {
+            const other = get().books.find((b) => b.id !== id);
+            if (other) await get().switchBook(other.id);
+            else get().newProject();
+            if (get().project.id === id) return;
+          }
+          set({ books: get().books.filter((b) => b.id !== id) });
+          await idbDelete(bookKey(id)).catch(() => undefined);
         },
         toast(t) {
           set({ toasts: [...get().toasts, { ...t, id: ++toastSeq }].slice(-6) });
@@ -417,12 +479,15 @@ export const useStudio = create<StudioState>()(
       onRehydrateStorage: () => () => {
         useStudio.setState((s) => ({ hydrated: true, docVersion: s.docVersion + 1 }));
       },
-      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements }),
+      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements }),
       merge: (persisted, current) => {
         const p = persisted as Partial<Persisted> | undefined;
         if (!p?.project || !p.doc) return current;
         const d = derive(p.project, p.doc);
-        return { ...current, ...p, project: d.project, manuscript: d.manuscript, queue: d.queue };
+        // Saves from before the library hold one book: it becomes the first tab.
+        const books = (p.books ?? []).map((b) => (b.id === d.project.id ? { ...b, title: d.project.title } : b));
+        if (!books.some((b) => b.id === d.project.id)) books.unshift(metaOf(d.project));
+        return { ...current, ...p, books, project: d.project, manuscript: d.manuscript, queue: d.queue };
       },
     },
   ),

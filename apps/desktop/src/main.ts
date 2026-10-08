@@ -20,6 +20,7 @@ protocol.registerSchemesAsPrivileged([
 let server: UtilityProcess | null = null;
 let port = 0;
 let win: BrowserWindow | null = null;
+let quitting = false;
 
 const settingsPath = () => join(app.getPath('userData'), 'settings.json');
 const logPath = () => join(app.getPath('logs'), 'main.log');
@@ -197,6 +198,20 @@ async function createWindow() {
   });
   const w = win;
   w.once('ready-to-show', () => w.show());
+  // Let the page finish writing the book before the window goes.
+  let saved = false;
+  w.on('close', (e) => {
+    if (saved || !w.webContents.getURL().startsWith(ORIGIN)) return;
+    e.preventDefault();
+    const timeout = new Promise((r) => setTimeout(r, 3000));
+    void Promise.race([w.webContents.executeJavaScript('window.__questwrightFlush?.()', true), timeout])
+      .catch((err: unknown) => log('save before close failed:', err))
+      .finally(() => {
+        saved = true;
+        if (!w.isDestroyed()) w.close();
+        if (quitting) app.quit();
+      });
+  });
   // Links to the web open in the default browser; the window only ever shows the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) void shell.openExternal(url);
@@ -251,4 +266,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-app.on('before-quit', stopServer);
+app.on('before-quit', () => {
+  quitting = true;
+  stopServer();
+});
