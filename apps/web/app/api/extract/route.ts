@@ -27,6 +27,15 @@ const World = z.object({
   slots: z.array(short).max(200),
   skills: z.array(short).max(1000),
   blessings: z.array(short).max(200),
+  magic: z
+    .array(
+      z.object({
+        name: short,
+        skills: z.array(z.object({ name: short, requires: short.optional(), at: z.string().max(100), holders: z.array(short).max(500) })).max(500),
+      }),
+    )
+    .max(100)
+    .default([]),
 });
 const Parsed = z.array(z.string().max(500)).max(100);
 

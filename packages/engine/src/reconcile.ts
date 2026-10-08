@@ -11,7 +11,7 @@ export interface ReconcileResult {
   created: string[];
 }
 
-const MECHANIC = new Set(['stat', 'class', 'title', 'currency', 'skill', 'item', 'equip', 'blessing']);
+const MECHANIC = new Set(['stat', 'class', 'title', 'currency', 'skill', 'item', 'equip', 'blessing', 'magic']);
 
 /**
  * Brings the change log in line with the current manuscript: drops records for

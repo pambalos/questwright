@@ -1,6 +1,6 @@
 import { flatten, label, type PlacedParagraph } from './manuscript';
 import { canonical } from './registry';
-import type { ChangeRecord, ContinuityWarning, Manuscript, PanelKey, Project, Registry, Sheet, WorldDefs, WorldState } from './types';
+import type { ChangeRecord, ContinuityWarning, MagicSystem, Manuscript, PanelKey, Project, Registry, Sheet, WorldDefs, WorldState } from './types';
 
 const PANEL_ORDER: PanelKey[] = ['stats', 'equipment', 'inventory', 'skills', 'currencies', 'blessings', 'titles'];
 
@@ -12,6 +12,7 @@ function emptySheet(characterId: string): Sheet {
     stats: {},
     currencies: {},
     skills: [],
+    magic: [],
     items: {},
     equipment: {},
     titles: [],
@@ -45,7 +46,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
   const end = Math.min(upto ?? flat.length - 1, flat.length - 1);
   const reg = project.characters;
   const sheets: Record<string, Sheet> = {};
-  const world: WorldDefs = { currencies: [], stats: [], slots: [], skills: [], blessings: [] };
+  const world: WorldDefs = { currencies: [], stats: [], slots: [], skills: [], blessings: [], magic: [] };
   const warnings: ContinuityWarning[] = [];
   const sheet = (id: string) => (sheets[id] ??= emptySheet(id));
   const panels = new Map<string, Set<PanelKey>>();
@@ -55,6 +56,20 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
     let set = panels.get(id);
     if (!set) panels.set(id, (set = new Set()));
     set.add(p);
+  };
+  /** The character starts on a magic system: it gets its own panel, and the world learns the system exists. */
+  const takeUp = (id: string, system: string, at: string) => {
+    const s = sheet(id);
+    s.promoted = true;
+    if (!s.magic.some((m) => m.system === system)) s.magic.push({ system, at });
+    tree(world, system);
+  };
+  const learn = (system: string, skill: string, requires: string | undefined, at: string, holder: string) => {
+    const t = tree(world, system);
+    let node = t.skills.find((k) => k.name === skill);
+    if (!node) t.skills.push((node = { name: skill, at, holders: [] }));
+    if (requires && !node.requires && requires !== skill) node.requires = requires;
+    if (!node.holders.includes(holder)) node.holders.push(holder);
   };
   const windowAt = project.window ? paras.get(project.window.startParagraphId)?.index : undefined;
   let carried: Set<string> | null = null;
@@ -116,18 +131,34 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
         break;
       }
       case 'skill': {
+        const replaced = c.replaces ? s.skills.find((k) => k.name === c.replaces) : undefined;
         if (c.replaces) {
-          const had = s.skills.some((k) => k.name === c.replaces);
-          if (!had) warn(id, 'unknown-skill', `${c.replaces} evolves, but ${name} never gained it`);
+          if (!replaced) warn(id, 'unknown-skill', `${c.replaces} evolves, but ${name} never gained it`);
           s.skills = s.skills.filter((k) => k.name !== c.replaces);
         }
+        // Which magic system the skill is part of: the author's word, then the story's, then what an
+        // evolved skill was part of, then where the world has already seen this skill.
+        const path = project.skillPaths?.[c.skill];
+        const raw = path ? path.system ?? undefined : c.system ?? replaced?.system ?? systemOf(world, c.skill);
+        const system = raw ? systemName(world, raw) : undefined;
+        const requires = path?.requires ?? c.requires ?? c.replaces;
         const existing = s.skills.find((k) => k.name === c.skill);
-        if (existing) existing.level = c.level;
-        else s.skills.push({ name: c.skill, level: c.level, ...(c.replaces ? { evolvedFrom: c.replaces } : {}) });
+        if (existing) {
+          existing.level = c.level;
+          if (system) existing.system = system;
+        } else {
+          s.skills.push({ name: c.skill, level: c.level, at: p.id, ...(c.replaces ? { evolvedFrom: c.replaces } : {}), ...(system ? { system } : {}), ...(requires ? { requires } : {}) });
+        }
         add(world.skills, c.skill);
-        unlock(id, 'skills');
+        if (system) {
+          takeUp(id, system, p.id);
+          learn(system, c.skill, requires, p.id, id);
+        } else unlock(id, 'skills');
         break;
       }
+      case 'magic':
+        takeUp(id, systemName(world, c.system), p.id);
+        break;
       case 'item': {
         const v = c.set ?? (s.items[c.item]?.count ?? 0) + c.delta;
         if (c.set !== undefined) (carried as Set<string> | null)?.delete(`${id}|item:${c.item}`);
@@ -180,6 +211,22 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
   for (const id of Object.keys(sheets)) if (reg[id]?.mergedInto || sheets[id]!.firstSeen === undefined) delete sheets[id];
 
   return { position: end, sheets, world, warnings };
+}
+
+/** A known magic system's own spelling of a name, so "qi cultivation" and "Qi Cultivation" are one system. */
+function systemName(world: WorldDefs, name: string): string {
+  const n = name.trim();
+  return world.magic.find((m) => m.name.toLowerCase() === n.toLowerCase())?.name ?? n;
+}
+
+function systemOf(world: WorldDefs, skill: string): string | undefined {
+  return world.magic.find((m) => m.skills.some((k) => k.name === skill))?.name;
+}
+
+function tree(world: WorldDefs, system: string): MagicSystem {
+  let t = world.magic.find((m) => m.name === system);
+  if (!t) world.magic.push((t = { name: system, skills: [] }));
+  return t;
 }
 
 function lastAtOrBefore(sorted: number[], end: number): number {

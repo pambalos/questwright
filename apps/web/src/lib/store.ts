@@ -111,6 +111,8 @@ export interface StudioState extends Persisted {
   setArtStyle(style: ArtStyle): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
   setValue(pid: string, characterId: string, kind: 'currency' | 'item', name: string, value: number): void;
+  /** Author's word on which magic system a skill belongs to (null: none), for every character who has it. */
+  setSkillPath(skill: string, system: string | null): void;
   /** Author correction: the character puts these on from the paragraph at `pid` onwards. */
   wear(pid: string, characterId: string, items: { item: string; slot: string; rarity?: Rarity }[]): void;
   merge(from: string, into: string): void;
@@ -335,6 +337,11 @@ export const useStudio = create<StudioState>()(
               ? ({ kind: 'currency', character: characterId, currency: name, delta: 0, set: value } as const)
               : ({ kind: 'item', character: characterId, item: name, delta: 0, set: value } as const);
           project.records.push({ id: newId(), paragraphId: pid, textHash: '', source: 'author', status: 'applied', change });
+          commit({ project });
+        },
+        setSkillPath(skill, system) {
+          const project = structuredClone(get().project);
+          project.skillPaths = { ...project.skillPaths, [skill]: { ...project.skillPaths?.[skill], system } };
           commit({ project });
         },
         wear(pid, characterId, items) {

@@ -19,7 +19,7 @@ describe('reconcile', () => {
     const first = parsedProject(SAMPLE).project;
     const changed = edit(SAMPLE, 'p5', '[Skill Acquired: Flame Ward (Lv 3)]');
     const { project } = reconcile(first, changed, ids());
-    expect(fold(project, changed, 6).sheets.kael!.skills).toEqual([{ name: 'Flame Ward', level: 3 }]);
+    expect(fold(project, changed, 6).sheets.kael!.skills).toEqual([{ name: 'Flame Ward', level: 3, at: 'p5' }]);
     expect(project.records.filter((r) => r.source === 'parser').length).toBe(first.records.length);
   });
 

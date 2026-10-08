@@ -44,7 +44,7 @@ export function parseParagraph(text: string, ctx: ParseContext = {}): ParsedChan
     const push = (change: Change) => out.push({ change, quote: line });
     const prefix = /^\[?\s*([A-Z][\w'-]*(?: [A-Z][\w'-]*)?)\s*·/.exec(line);
     const lead = prefix?.[1];
-    const startsWithRule = lead && /^(Level|Party|Status|Skill|Title|Class|Item|Equipped|Blessing)\b/.test(lead);
+    const startsWithRule = lead && /^(Level|Party|Status|Skill|Title|Class|Item|Equipped|Blessing|Path|Magic|Discipline|School)\b/.test(lead);
     const who = lead && !startsWithRule ? lead : boxSubject;
 
     const party = /Party formed:\s*([^\]\n]+)/i.exec(line);
@@ -67,11 +67,16 @@ export function parseParagraph(text: string, ctx: ParseContext = {}): ParsedChan
     const free = /(\d+)\s+free\s+(?:stat\s+)?points?/i.exec(line);
     if (free) push({ kind: 'stat', character: who, stat: FREE_POINTS, set: Number(free[1]) });
 
-    const evolved = /Skill Evolved:\s*([^→\]]+?)\s*(?:→|->)\s*([^(\]]+?)\s*\(Lv\.?\s*(\d+)\)/i.exec(line);
-    if (evolved) push({ kind: 'skill', character: who, skill: evolved[2]!.trim(), level: Number(evolved[3]), replaces: evolved[1]!.trim() });
+    // A skill's magic system can follow its level: "(Lv 1, Qi Cultivation)".
+    const system = (s?: string) => (s?.trim() ? { system: s.trim() } : {});
+    const evolved = /Skill Evolved:\s*([^→\]]+?)\s*(?:→|->)\s*([^(\]]+?)\s*\(Lv\.?\s*(\d+)(?:\s*[,;]\s*([^)]+))?\)/i.exec(line);
+    if (evolved) push({ kind: 'skill', character: who, skill: evolved[2]!.trim(), level: Number(evolved[3]), replaces: evolved[1]!.trim(), ...system(evolved[4]) });
     else
-      for (const m of line.matchAll(/Skill(?: Acquired| Learned| Gained)?:\s*([^(\]\n·]+?)\s*\(Lv\.?\s*(\d+)\)/gi))
-        push({ kind: 'skill', character: who, skill: m[1]!.trim(), level: Number(m[2]) });
+      for (const m of line.matchAll(/Skill(?: Acquired| Learned| Gained)?:\s*([^(\]\n·]+?)\s*\(Lv\.?\s*(\d+)(?:\s*[,;]\s*([^)]+))?\)/gi))
+        push({ kind: 'skill', character: who, skill: m[1]!.trim(), level: Number(m[2]), ...system(m[3]) });
+
+    const path = /(?:Path|Magic System|Discipline|School) (?:Unlocked|Awakened|Opened|Learned|Joined):\s*([^\]\n·]+)/i.exec(line);
+    if (path) push({ kind: 'magic', character: who, system: path[1]!.trim() });
 
     const title = /Title (?:Earned|Gained|Acquired|Unlocked):\s*([^\]\n]+)/i.exec(line);
     if (title) push({ kind: 'title', character: who, name: title[1]!.trim() });

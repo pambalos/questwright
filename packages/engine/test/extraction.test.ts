@@ -9,8 +9,8 @@ const p4 = SAMPLE.chapters[0]!.paragraphs[3]!;
 const reading: Extraction = {
   characters: [{ name: 'Kael', role: null, description: null, sameAs: null, look: null }],
   changes: [
-    { kind: 'equip', character: 'Kael', name: 'Iron Dagger', amount: null, slot: 'Belt', rarity: null, quote: 'slid the dagger into his belt' },
-    { kind: 'gain_currency', character: 'he', name: 'Gold', amount: 20, slot: null, rarity: null, quote: 'twenty gold' },
+    { kind: 'equip', character: 'Kael', name: 'Iron Dagger', amount: null, slot: 'Belt', rarity: null, system: null, requires: null, quote: 'slid the dagger into his belt' },
+    { kind: 'gain_currency', character: 'he', name: 'Gold', amount: 20, slot: null, rarity: null, system: null, requires: null, quote: 'twenty gold' },
   ],
 };
 
@@ -49,7 +49,7 @@ describe('AI extraction contract', () => {
     const base = parsedProject(SAMPLE).project;
     const p5 = SAMPLE.chapters[0]!.paragraphs[4]!;
     const { proposals } = applyExtraction(base, 'p5', p5.text, {
-      characters: [], changes: [{ kind: 'skill', character: 'Kael', name: 'Flame Ward', amount: 1, slot: null, rarity: null, quote: 'Flame Ward' }],
+      characters: [], changes: [{ kind: 'skill', character: 'Kael', name: 'Flame Ward', amount: 1, slot: null, rarity: null, system: null, requires: null, quote: 'Flame Ward' }],
     }, ids());
     expect(proposals).toBe(0);
   });
@@ -64,7 +64,7 @@ describe('AI extraction contract', () => {
   });
 
   it('builds a prompt that carries the paragraph and its context', () => {
-    const text = extractionPrompt({ paragraph: 'He paid.', previous: 'Kael walked in.', characters: [{ name: 'Kael', aliases: ['the boy'] }], world: { currencies: ['Gold'], stats: [], slots: [], skills: [], blessings: [] }, sheets: ['Kael: 15 Gold'], parsed: [] });
+    const text = extractionPrompt({ paragraph: 'He paid.', previous: 'Kael walked in.', characters: [{ name: 'Kael', aliases: ['the boy'] }], world: { currencies: ['Gold'], stats: [], slots: [], skills: [], blessings: [], magic: [] }, sheets: ['Kael: 15 Gold'], parsed: [] });
     expect(text).toContain('Kael (also: the boy)');
     expect(text).toContain('<paragraph>\nHe paid.\n</paragraph>');
     expect(text).toContain('Kael: 15 Gold');
@@ -75,7 +75,7 @@ describe('batch reading', () => {
   it('numbers the paragraphs and notes what system boxes already tracked', () => {
     const text = batchExtractionPrompt({
       paragraphs: [{ text: 'Kael walked in.', parsed: [] }, { text: 'He paid.', parsed: ['Kael: -5 Gold'] }],
-      characters: [{ name: 'Kael', aliases: [] }], world: { currencies: ['Gold'], stats: [], slots: [], skills: [], blessings: [] }, sheets: [],
+      characters: [{ name: 'Kael', aliases: [] }], world: { currencies: ['Gold'], stats: [], slots: [], skills: [], blessings: [], magic: [] }, sheets: [],
     });
     expect(text).toContain('<paragraph n="1">\nKael walked in.\n</paragraph>');
     expect(text).toContain('<paragraph n="2">\nHe paid.\n(Already tracked from system messages in this paragraph: Kael: -5 Gold)\n</paragraph>');

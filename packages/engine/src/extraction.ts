@@ -22,6 +22,7 @@ export const CHANGE_KINDS = [
   'title',
   'blessing',
   'appearance',
+  'magic_system',
 ] as const;
 
 export const ExtractionSchema = z.object({
@@ -49,6 +50,8 @@ export const ExtractionSchema = z.object({
       amount: z.number().nullable(),
       slot: z.string().nullable(),
       rarity: z.enum(['common', 'uncommon', 'rare', 'epic', 'legendary']).nullable(),
+      system: z.string().nullable(),
+      requires: z.string().nullable(),
       quote: z.string(),
     }),
   ),
@@ -75,9 +78,19 @@ const EXTRACTION_RULES = `Rules:
 - equip: name is the item, slot is a short slot name such as Main hand, Off hand, Head, Chest, Belt, Ring, Back. Equipping something already carried is only an equip.
 - appearance: a lasting physical change worth showing on the character's figure, such as a scar, a lost limb or a new tattoo. name is a short description.
 - rarity: only when the text signals it (glowing, legendary, a named artifact). Otherwise null.
+- skill: name is the skill. system: the magic system, discipline or path it belongs to (Qi Cultivation, Fire Magic, Swordsmanship) when the text or the world definitions make that clear, using a known system's exact name; otherwise null. requires: the known skill it builds on, evolves from or was unlocked by; otherwise null.
+- magic_system: the character takes up a magic system, discipline or path for the first time (awakens to Qi, is accepted into a school of magic, chooses a class's path). name is the system. Not for a system they already practise.
+- system and requires are null for every kind except skill.
 - characters: every named or clearly identified character present in the paragraph. role and description only from what the text says, otherwise null. look: only traits the text states (a grey cloak is outfit "cloak" and clothColor "#7d7f86"; colours as #rrggbb hex), otherwise null fields or null. sameAs: when the paragraph reveals that a name belongs to someone already known (the stranger turns out to be Lyra), give the known name; otherwise null.
 - quote: the shortest exact span of the paragraph that shows the change, copied character for character.
 Return empty lists when nothing applies.`;
+
+/** The world definitions as the model reads them. */
+function worldLine(world: WorldDefs): string {
+  const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none yet');
+  const magic = (world.magic ?? []).map((m) => `${m.name} (${m.skills.length ? m.skills.map((k) => (k.requires ? `${k.name} <- ${k.requires}` : k.name)).join(', ') : 'no skills yet'})`);
+  return `World definitions. Currencies: ${list(world.currencies)}. Stats: ${list(world.stats)}. Equipment slots: ${list(world.slots)}. Skills: ${list(world.skills)}. Magic systems: ${list(magic)}.`;
+}
 
 export const EXTRACTION_SYSTEM = `You keep the character sheets for a LitRPG novel while the author writes it. You read one paragraph at a time and report what happens to the characters' game state in that paragraph.
 
@@ -108,14 +121,13 @@ export interface BatchExtractionInput {
 
 /** Everything the model needs to read a run of paragraphs, as plain text. */
 export function batchExtractionPrompt(input: BatchExtractionInput): string {
-  const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none yet');
   const paragraphs = input.paragraphs.map((p, i) => {
     const parsed = p.parsed.length ? `\n(Already tracked from system messages in this paragraph: ${p.parsed.join('; ')})` : '';
     return `<paragraph n="${i + 1}">\n${p.text}${parsed}\n</paragraph>`;
   });
   return [
     `Known characters: ${input.characters.length ? input.characters.map((c) => (c.aliases.length ? `${c.name} (also: ${c.aliases.join(', ')})` : c.name)).join('; ') : 'none yet'}`,
-    `World definitions. Currencies: ${list(input.world.currencies)}. Stats: ${list(input.world.stats)}. Equipment slots: ${list(input.world.slots)}. Skills: ${list(input.world.skills)}.`,
+    worldLine(input.world),
     `Sheets before this passage:\n${input.sheets.length ? input.sheets.join('\n') : 'none yet'}`,
     input.previous ? `<previous_paragraph>\n${input.previous}\n</previous_paragraph>` : '',
     `<passage>\n${paragraphs.join('\n')}\n</passage>`,
@@ -147,10 +159,9 @@ export interface ExtractionInput {
 
 /** Everything the model needs to read one paragraph, as plain text. */
 export function extractionPrompt(input: ExtractionInput): string {
-  const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none yet');
   return [
     `Known characters: ${input.characters.length ? input.characters.map((c) => (c.aliases.length ? `${c.name} (also: ${c.aliases.join(', ')})` : c.name)).join('; ') : 'none yet'}`,
-    `World definitions. Currencies: ${list(input.world.currencies)}. Stats: ${list(input.world.stats)}. Equipment slots: ${list(input.world.slots)}. Skills: ${list(input.world.skills)}.`,
+    worldLine(input.world),
     `Current sheets:\n${input.sheets.length ? input.sheets.join('\n') : 'none yet'}`,
     `Already tracked from system messages in this paragraph: ${input.parsed.length ? input.parsed.join('; ') : 'nothing'}`,
     input.previous ? `<previous_paragraph>\n${input.previous}\n</previous_paragraph>` : '',
@@ -187,8 +198,12 @@ export function describeChange(c: Change, nameOf: (id: string) => string = (x) =
       return `Title: ${c.name}`;
     case 'currency':
       return c.set !== undefined ? `${c.currency} set to ${c.set}` : `${sign(c.delta)} ${c.currency}`;
-    case 'skill':
-      return c.replaces ? `${c.replaces} evolves into ${c.skill} (Lv ${c.level})` : `Skill: ${c.skill} (Lv ${c.level})`;
+    case 'skill': {
+      const path = c.system ? ` · ${c.system}` : '';
+      return c.replaces ? `${c.replaces} evolves into ${c.skill} (Lv ${c.level})${path}` : `Skill: ${c.skill} (Lv ${c.level})${path}`;
+    }
+    case 'magic':
+      return `Takes up ${c.system}`;
     case 'item':
       return c.set !== undefined ? `${c.item} set to ${c.set}` : `${sign(c.delta)} ${c.item}`;
     case 'equip':
@@ -224,7 +239,16 @@ function toChange(x: Extraction['changes'][number]): Change | null {
     case 'stat_change':
       return x.amount ? { kind: 'stat', character: who, stat: x.name, delta: x.amount } : null;
     case 'skill':
-      return { kind: 'skill', character: who, skill: x.name, level: Math.max(1, x.amount ?? 1) };
+      return {
+        kind: 'skill',
+        character: who,
+        skill: x.name,
+        level: Math.max(1, x.amount ?? 1),
+        ...(x.system ? { system: x.system } : {}),
+        ...(x.requires && x.requires !== x.name ? { requires: x.requires } : {}),
+      };
+    case 'magic_system':
+      return { kind: 'magic', character: who, system: x.name };
     case 'class':
       return { kind: 'class', character: who, name: x.name };
     case 'title':
@@ -251,6 +275,8 @@ export function changeKey(c: Change): string {
       return `equip:${c.character}:${c.item}`;
     case 'skill':
       return `skill:${c.character}:${c.skill}`;
+    case 'magic':
+      return `magic:${c.character}:${c.system.toLowerCase()}`;
     case 'blessing':
       return `blessing:${c.character}:${c.blessing}`;
     case 'class':

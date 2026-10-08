@@ -6,6 +6,7 @@ import { studioCharacter } from '@/figure/studio';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
 import { frameFromProse, modelFor } from '@/figure/vrm/models';
 import { desktop } from '@/lib/desktop';
+import { TalentTree } from './TalentTree';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
 import { useStudio } from '@/lib/store';
@@ -37,6 +38,7 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
   const setLook = useStudio((s) => s.setLook);
   const setValue = useStudio((s) => s.setValue);
   const wear = useStudio((s) => s.wear);
+  const setSkillPath = useStudio((s) => s.setSkillPath);
   const [hover, setHover] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const features = useMemo(() => gearFor(sheet), [sheet]);
@@ -107,6 +109,7 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
     if (slot && !worn.has(item)) wearable.push({ item, slot, rarity: v.rarity });
   }
   const putOn: PutOn = (xs) => atPid && wear(atPid, sheet.characterId, xs);
+  const paths: Paths = { systems: world.magic.map((m) => m.name), set: setSkillPath };
 
   return (
     <>
@@ -165,9 +168,18 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
       )}
       {sheet.panels.filter((p) => p !== 'equipment').map((p) => (
         <Section key={p} id={`${sheet.characterId}:${p}`} title={TITLES[p]} count={count(sheet, p)}>
-          {body(sheet, p, warnings.filter((w) => w.characterId === sheet.characterId), onJump, correct, wearable, putOn)}
+          {body(sheet, p, warnings.filter((w) => w.characterId === sheet.characterId), onJump, correct, wearable, putOn, paths)}
         </Section>
       ))}
+      {sheet.magic.map((m) => {
+        const system = world.magic.find((x) => x.name === m.system) ?? { name: m.system, skills: [] };
+        const known = sheet.skills.filter((k) => k.system === m.system).length;
+        return (
+          <Section key={m.system} id={`${sheet.characterId}:magic:${m.system}`} title={m.system} count={`${known} ${known === 1 ? 'skill' : 'skills'}`} magic>
+            <TalentTree system={system} sheet={sheet} flat={flat} onJump={onJump} />
+          </Section>
+        );
+      })}
     </>
   );
 }
@@ -178,7 +190,7 @@ const TITLES: Record<PanelKey, string> = {
 
 function count(s: Sheet, p: PanelKey): string | undefined {
   if (p === 'inventory') return `${Object.keys(s.items).length} items`;
-  if (p === 'skills') return `${s.skills.length}`;
+  if (p === 'skills') return `${s.skills.filter((k) => !k.system).length}`;
   if (p === 'titles') return `${s.titles.length}`;
   return undefined;
 }
@@ -190,8 +202,13 @@ interface Wearable {
   rarity?: Rarity;
 }
 type PutOn = (items: Wearable[]) => void;
+/** Moving a skill onto a magic system's tree, or off it. */
+interface Paths {
+  systems: string[];
+  set(skill: string, system: string | null): void;
+}
 
-function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid: string) => void, correct: Correct, wearable: Wearable[], putOn: PutOn): ReactNode {
+function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid: string) => void, correct: Correct, wearable: Wearable[], putOn: PutOn, paths: Paths): ReactNode {
   const unsure = (key: string) => s.unconfirmed.includes(key);
   switch (p) {
     case 'stats': {
@@ -238,9 +255,13 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid
     case 'skills':
       return (
         <div className="rows">
-          {s.skills.map((k) => (
+          {s.skills.filter((k) => !k.system).map((k) => (
             <div className="row" key={k.name}>
-              <span>{k.name}{k.evolvedFrom && <span className="sub">Evolved from {k.evolvedFrom}</span>}</span>
+              <span>
+                {k.name}
+                {k.evolvedFrom && <span className="sub">Evolved from {k.evolvedFrom}</span>}
+                <PathPicker skill={k.name} paths={paths} />
+              </span>
               <span className="pips" title={`Level ${k.level}`}>{Array.from({ length: 10 }, (_, i) => <i key={i} className={i < Math.min(k.level, 10) ? 'on' : ''} />)}</span>
             </div>
           ))}
@@ -285,13 +306,35 @@ function oneEach(xs: Wearable[]): Wearable[] {
   return [...new Map(xs.map((w) => [w.slot, w])).values()];
 }
 
-function Section({ id, title, count, children }: { id: string; title: string; count?: string; children: ReactNode }) {
+/** Puts a skill on a magic system's tree: an existing one, or a new one the author names. */
+function PathPicker({ skill, paths }: { skill: string; paths: Paths }) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState('');
+  if (naming) {
+    return (
+      <form className="path-pick" onSubmit={(e) => { e.preventDefault(); if (name.trim()) paths.set(skill, name.trim()); setNaming(false); }}>
+        <input autoFocus value={name} placeholder="Magic system" aria-label={`Magic system for ${skill}`} onChange={(e) => setName(e.target.value)} onBlur={() => !name.trim() && setNaming(false)} />
+        <button className="mini" type="submit">Add</button>
+      </form>
+    );
+  }
+  return (
+    <select className="path-pick" aria-label={`Magic system for ${skill}`} value="" onChange={(e) => (e.target.value === '__new' ? setNaming(true) : e.target.value && paths.set(skill, e.target.value))}>
+      <option value="">Add to a path…</option>
+      {paths.systems.map((s) => <option key={s} value={s}>{s}</option>)}
+      <option value="__new">New magic system…</option>
+    </select>
+  );
+}
+
+function Section({ id, title, count, children, magic }: { id: string; title: string; count?: string; children: ReactNode; magic?: boolean }) {
   const collapsed = useStudio((s) => s.collapsed.includes(id));
   const toggle = useStudio((s) => s.toggleCollapsed);
   const flash = useStudio((s) => s.flash.includes(id));
   return (
-    <section className={`pnl${collapsed ? ' collapsed' : ''}${flash ? ' unlocked' : ''}`}>
+    <section className={`pnl${collapsed ? ' collapsed' : ''}${flash ? ' unlocked' : ''}${magic ? ' magic' : ''}`}>
       <button className="pnl-h" aria-expanded={!collapsed} onClick={() => toggle(id)}>
+        {magic && <span className="pnl-sigil" aria-hidden="true">✦</span>}
         {title}
         {count && <span className="cnt">{count}</span>}
         <span className="chev" aria-hidden="true">▾</span>

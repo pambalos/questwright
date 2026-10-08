@@ -65,7 +65,9 @@ export type Change =
   | { kind: 'class'; character: string; name: string }
   | { kind: 'title'; character: string; name: string }
   | { kind: 'currency'; character: string; currency: string; delta: number; set?: number }
-  | { kind: 'skill'; character: string; skill: string; level: number; replaces?: string }
+  | { kind: 'skill'; character: string; skill: string; level: number; replaces?: string; system?: string; requires?: string }
+  /** The character takes up a magic system, discipline or path. */
+  | { kind: 'magic'; character: string; system: string }
   | { kind: 'item'; character: string; item: string; delta: number; set?: number; rarity?: Rarity }
   | { kind: 'equip'; character: string; slot: string; item: string; rarity?: Rarity }
   | { kind: 'unequip'; character: string; slot: string }
@@ -112,6 +114,8 @@ export interface Project {
   /** Chapters of archived books still waiting for a character skim. */
   skimPending?: string[];
   art?: { style: ArtStyle };
+  /** Author's word on which magic system a skill belongs to, and what it builds on. Wins over the AI's reading. */
+  skillPaths?: Record<string, { system: string | null; requires?: string }>;
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';
@@ -128,7 +132,9 @@ export interface Sheet {
   className?: string;
   stats: Record<string, number>;
   currencies: Record<string, number>;
-  skills: { name: string; level: number; evolvedFrom?: string }[];
+  skills: { name: string; level: number; evolvedFrom?: string; system?: string; requires?: string; /** Paragraph where it was first gained. */ at?: string }[];
+  /** Magic systems the character has taken up, in the order they did. Each gets its own panel. */
+  magic: { system: string; at: string }[];
   items: Record<string, { count: number; rarity?: Rarity }>;
   equipment: Record<string, { item: string; rarity?: Rarity }>;
   titles: string[];
@@ -145,6 +151,13 @@ export interface WorldDefs {
   slots: string[];
   skills: string[];
   blessings: string[];
+  /** Magic systems discovered so far, each a tree of the skills the story has shown in it. */
+  magic: MagicSystem[];
+}
+
+export interface MagicSystem {
+  name: string;
+  skills: { name: string; requires?: string; /** Paragraph where the world first saw it. */ at: string; /** Characters who have it. */ holders: string[] }[];
 }
 
 export type WarningKind = 'negative-currency' | 'negative-item' | 'unknown-skill' | 'level-down';

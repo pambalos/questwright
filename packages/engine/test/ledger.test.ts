@@ -13,7 +13,7 @@ describe('fold over the sample story', () => {
     expect(s.promoted).toBe(true);
     expect(s.className).toBe('Ember Warden');
     expect(s.stats).toMatchObject({ Level: 2, STR: 8, AGI: 5, VIT: 8, MANA: 12, 'Free points': 3 });
-    expect(s.skills).toEqual([{ name: 'Ember Bulwark', level: 1, evolvedFrom: 'Flame Ward' }]);
+    expect(s.skills).toEqual([{ name: 'Ember Bulwark', level: 1, evolvedFrom: 'Flame Ward', requires: 'Flame Ward', at: 'p16' }]);
     expect(s.titles).toEqual(['Wolfbane']);
     expect(s.blessingPoints).toBe(1);
     expect(s.panels).toEqual(['stats', 'skills', 'blessings', 'titles']);
@@ -22,7 +22,7 @@ describe('fold over the sample story', () => {
   it('shows the sheet as of an earlier paragraph', () => {
     const atCh1 = fold(project, SAMPLE, 6).sheets.kael!;
     expect(atCh1.stats.Level).toBe(1);
-    expect(atCh1.skills).toEqual([{ name: 'Flame Ward', level: 1 }]);
+    expect(atCh1.skills).toEqual([{ name: 'Flame Ward', level: 1, at: 'p5' }]);
     expect(fold(project, SAMPLE, 6).sheets.lyra).toBeUndefined();
   });
 

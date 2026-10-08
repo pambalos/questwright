@@ -62,7 +62,7 @@ export function Panel({ view, latest, flat, viewIndex }: Props) {
         {tab === 'roster' ? (
           <Roster view={view} flat={flat} />
         ) : tab === 'world' ? (
-          <WorldTab world={view.world} />
+          <WorldTab world={view.world} flat={flat} onJump={jump} />
         ) : sheet?.promoted ? (
           <CharacterSheet sheet={sheet} world={view.world} warnings={view.warnings} flat={flat} atPid={at?.id ?? null} onJump={jump} />
         ) : (
