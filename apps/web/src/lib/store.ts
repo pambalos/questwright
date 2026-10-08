@@ -111,6 +111,8 @@ export interface StudioState extends Persisted {
   setArtStyle(style: ArtStyle): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
   setValue(pid: string, characterId: string, kind: 'currency' | 'item', name: string, value: number): void;
+  /** The author's own notes on a compendium entry (or a character's story). */
+  setLoreNote(key: string, text: string): void;
   /** Author's word on which magic system a skill belongs to (null: none), for every character who has it. */
   setSkillPath(skill: string, system: string | null): void;
   /** Author correction: the character puts these on from the paragraph at `pid` onwards. */
@@ -253,7 +255,7 @@ export const useStudio = create<StudioState>()(
           const sys = d.project.records
             .filter((r) => r.source === 'parser' && !before.has(r.id) && r.change.kind !== 'mention')
             .filter((r) => !s.project.records.some((o) => o.source === 'parser' && o.paragraphId === r.paragraphId && JSON.stringify(o.change) === JSON.stringify(r.change)))
-            .map((r) => ({ kind: 'sys' as const, head: 'System', body: `${r.change.kind === 'merge' ? '' : `${name(r.change.character)} · `}${describeChange(r.change, name)}` }));
+            .map((r) => ({ kind: 'sys' as const, head: 'System', body: `${r.change.kind === 'merge' || r.change.kind === 'lore' ? '' : `${name(r.change.character)} · `}${describeChange(r.change, name)}` }));
           commit({ doc, project: d.project, manuscript: d.manuscript, queue: d.queue, lastEditAt: Date.now() }, sys.slice(0, 4));
         },
         setCursor(pid) {
@@ -338,6 +340,14 @@ export const useStudio = create<StudioState>()(
               : ({ kind: 'item', character: characterId, item: name, delta: 0, set: value } as const);
           project.records.push({ id: newId(), paragraphId: pid, textHash: '', source: 'author', status: 'applied', change });
           commit({ project });
+        },
+        setLoreNote(key, text) {
+          const project = structuredClone(get().project);
+          const notes = { ...project.loreNotes };
+          if (text.trim()) notes[key] = text;
+          else delete notes[key];
+          project.loreNotes = notes;
+          set({ project });
         },
         setSkillPath(skill, system) {
           const project = structuredClone(get().project);

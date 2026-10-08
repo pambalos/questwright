@@ -1,6 +1,6 @@
 import { flatten, label, type PlacedParagraph } from './manuscript';
 import { canonical } from './registry';
-import type { ChangeRecord, ContinuityWarning, MagicSystem, Manuscript, PanelKey, Project, Registry, Sheet, WorldDefs, WorldState } from './types';
+import type { ChangeRecord, CompendiumEntry, ContinuityWarning, LoreCategory, MagicSystem, Manuscript, PanelKey, Project, Registry, Sheet, WorldDefs, WorldState } from './types';
 
 const PANEL_ORDER: PanelKey[] = ['stats', 'equipment', 'inventory', 'skills', 'currencies', 'blessings', 'titles'];
 
@@ -13,6 +13,7 @@ function emptySheet(characterId: string): Sheet {
     currencies: {},
     skills: [],
     magic: [],
+    lore: [],
     items: {},
     equipment: {},
     titles: [],
@@ -71,6 +72,14 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
     if (requires && !node.requires && requires !== skill) node.requires = requires;
     if (!node.holders.includes(holder)) node.holders.push(holder);
   };
+  const entries = new Map<string, CompendiumEntry>();
+  const entry = (key: string, name: string, category: LoreCategory, at: string, characterId?: string) => {
+    let e = entries.get(key);
+    if (!e) entries.set(key, (e = { key, name, category, firstAt: at, facts: [], ...(characterId ? { characterId } : {}) }));
+    // A later, more specific reading of what something is wins over "other".
+    if (e.category === 'other' && category !== 'other') e.category = category;
+    return e;
+  };
   const windowAt = project.window ? paras.get(project.window.startParagraphId)?.index : undefined;
   let carried: Set<string> | null = null;
   const carry = () => {
@@ -96,6 +105,18 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
       warnings.push({ kind, characterId, paragraphId: p.id, message: `${message} (${label(p)})` });
 
     if (c.kind === 'merge') continue;
+    if (c.kind === 'lore') {
+      const fact = { fact: c.fact, at: p.id, recordId: r.id };
+      const who = c.character ? canonical(reg, c.character) : undefined;
+      if (who && reg[who]) {
+        seen(who, p.index);
+        sheet(who).lore.push(fact);
+        entry(`char:${who}`, reg[who]!.name, 'character', p.id, who).facts.push(fact);
+      } else {
+        entry(`lore:${c.subject.trim().toLowerCase()}`, c.subject.trim(), c.category, p.id).facts.push(fact);
+      }
+      continue;
+    }
     const id = canonical(reg, c.character);
     const s = sheet(id);
     seen(id, p.index);
@@ -210,7 +231,19 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
   for (const [id, set] of panels) sheet(id).panels = PANEL_ORDER.filter((k) => set.has(k));
   for (const id of Object.keys(sheets)) if (reg[id]?.mergedInto || sheets[id]!.firstSeen === undefined) delete sheets[id];
 
-  return { position: end, sheets, world, warnings };
+  // Every character seen so far has an entry, even before the story says much about them.
+  for (const s of Object.values(sheets)) {
+    const c = reg[s.characterId];
+    const first = flat[s.firstSeen!];
+    if (c && first) {
+      const e = entry(`char:${c.id}`, c.name, 'character', first.id, c.id);
+      e.name = c.name;
+      if ((paras.get(e.firstAt)?.index ?? Infinity) > first.index) e.firstAt = first.id;
+    }
+  }
+  const compendium = [...entries.values()].sort((a, b) => (paras.get(a.firstAt)?.index ?? 0) - (paras.get(b.firstAt)?.index ?? 0));
+
+  return { position: end, sheets, world, warnings, compendium };
 }
 
 /** A known magic system's own spelling of a name, so "qi cultivation" and "Qi Cultivation" are one system. */

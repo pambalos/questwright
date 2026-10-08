@@ -7,6 +7,7 @@ import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
 import { useStudio } from '@/lib/store';
 import { CharacterSheet } from './CharacterSheet';
+import { Compendium } from './Compendium';
 import { Roster } from './Roster';
 import { WorldTab } from './WorldTab';
 
@@ -47,6 +48,9 @@ export function Panel({ view, latest, flat, viewIndex }: Props) {
         <button role="tab" aria-selected={tab === 'roster'} className={`tab${tab === 'roster' ? ' on' : ''}`} onClick={() => setTab('roster')}>
           Roster <span className="n">{Object.keys(latest.sheets).length}</span>
         </button>
+        <button role="tab" aria-selected={tab === 'compendium'} className={`tab${tab === 'compendium' ? ' on' : ''}`} onClick={() => setTab('compendium')}>
+          Compendium <span className="n">{latest.compendium.length}</span>
+        </button>
         <button role="tab" aria-selected={tab === 'world'} className={`tab${tab === 'world' ? ' on' : ''}`} onClick={() => setTab('world')}>
           World
         </button>
@@ -61,6 +65,8 @@ export function Panel({ view, latest, flat, viewIndex }: Props) {
         <LootTray flat={flat} />
         {tab === 'roster' ? (
           <Roster view={view} flat={flat} />
+        ) : tab === 'compendium' ? (
+          <Compendium state={view} flat={flat} onJump={jump} />
         ) : tab === 'world' ? (
           <WorldTab world={view.world} flat={flat} onJump={jump} />
         ) : sheet?.promoted ? (
@@ -119,7 +125,7 @@ function LootTray({ flat }: { flat: PlacedParagraph[] }) {
       </div>
       {pending.map((r) => {
         const c = r.change;
-        const who = c.kind === 'merge' ? 'Roster' : name(c.character);
+        const who = c.kind === 'merge' ? 'Roster' : c.kind === 'lore' ? 'Compendium' : name(c.character);
         const rarity = 'rarity' in c ? c.rarity : undefined;
         const p = order.get(r.paragraphId)!;
         return (

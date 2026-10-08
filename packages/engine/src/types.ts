@@ -68,6 +68,8 @@ export type Change =
   | { kind: 'skill'; character: string; skill: string; level: number; replaces?: string; system?: string; requires?: string }
   /** The character takes up a magic system, discipline or path. */
   | { kind: 'magic'; character: string; system: string }
+  /** A fact for the compendium: who someone is, where they come from, what a creature or place is. `character` is set when the subject is a character. */
+  | { kind: 'lore'; character?: string; subject: string; category: LoreCategory; fact: string }
   | { kind: 'item'; character: string; item: string; delta: number; set?: number; rarity?: Rarity }
   | { kind: 'equip'; character: string; slot: string; item: string; rarity?: Rarity }
   | { kind: 'unequip'; character: string; slot: string }
@@ -76,6 +78,9 @@ export type Change =
   | { kind: 'merge'; from: string; into: string };
 
 export type ChangeKind = Change['kind'];
+
+export const LORE_CATEGORIES = ['character', 'creature', 'place', 'faction', 'item', 'other'] as const;
+export type LoreCategory = (typeof LORE_CATEGORIES)[number];
 
 /** Where a change came from. Parser changes apply on their own; AI changes wait for the author. */
 export type Source = 'parser' | 'ai' | 'author';
@@ -116,6 +121,8 @@ export interface Project {
   art?: { style: ArtStyle };
   /** Author's word on which magic system a skill belongs to, and what it builds on. Wins over the AI's reading. */
   skillPaths?: Record<string, { system: string | null; requires?: string }>;
+  /** The author's own notes on compendium entries, by entry key. */
+  loreNotes?: Record<string, string>;
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';
@@ -135,6 +142,8 @@ export interface Sheet {
   skills: { name: string; level: number; evolvedFrom?: string; system?: string; requires?: string; /** Paragraph where it was first gained. */ at?: string }[];
   /** Magic systems the character has taken up, in the order they did. Each gets its own panel. */
   magic: { system: string; at: string }[];
+  /** What the story has revealed about the character, in order: their backstory as it unfolds. */
+  lore: { fact: string; at: string; recordId: string }[];
   items: Record<string, { count: number; rarity?: Rarity }>;
   equipment: Record<string, { item: string; rarity?: Rarity }>;
   titles: string[];
@@ -175,4 +184,17 @@ export interface WorldState {
   sheets: Record<string, Sheet>;
   world: WorldDefs;
   warnings: ContinuityWarning[];
+  /** Every character, creature, place, faction and item discovered so far, in order of first appearance. */
+  compendium: CompendiumEntry[];
+}
+
+export interface CompendiumEntry {
+  /** "char:<id>" for characters, "lore:<lowercase name>" for everything else. */
+  key: string;
+  name: string;
+  category: LoreCategory;
+  characterId?: string;
+  /** Paragraph where it first appears. */
+  firstAt: string;
+  facts: { fact: string; at: string; recordId: string }[];
 }

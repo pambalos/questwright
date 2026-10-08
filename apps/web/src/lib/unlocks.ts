@@ -15,6 +15,8 @@ export interface Snapshot {
   codex: string[];
   /** "characterId|system|skill" for every skill on a magic system's tree. */
   talents: string[];
+  /** "category|name" for compendium entries other than characters (they get tabs instead). */
+  compendium: string[];
   warnings: string[];
 }
 
@@ -46,6 +48,7 @@ export function snapshot(state: WorldState): Snapshot {
     slots: [...state.world.slots],
     codex: [...state.world.currencies, ...state.world.blessings, ...state.world.magic.map((m) => m.name)],
     talents,
+    compendium: state.compendium.filter((e) => e.category !== 'character').map((e) => `${e.category}|${e.name}`),
     warnings: state.warnings.map((w) => `${w.paragraphId}:${w.characterId}:${w.kind}`),
   };
 }
@@ -67,6 +70,10 @@ export function unlockToasts(prev: Snapshot, next: Snapshot, project: Project, s
   for (const t of fresh(prev.talents ?? [], next.talents)) {
     const [id, system, skill] = t.split('|') as [string, string, string];
     out.push({ kind: 'unlock', head: `Talent learned · ${system}`, body: `${name(id)} · ${skill}` });
+  }
+  for (const e of fresh(prev.compendium ?? [], next.compendium)) {
+    const [category, entry] = e.split('|') as [string, string];
+    out.push({ kind: 'unlock', head: category === 'creature' ? 'Bestiary entry discovered' : 'Compendium entry discovered', body: entry });
   }
   for (const s of fresh(prev.slots, next.slots)) out.push({ kind: 'unlock', head: 'New equipment slot', body: s });
   for (const c of fresh(prev.codex, next.codex)) out.push({ kind: 'unlock', head: 'Codex entry discovered', body: c });

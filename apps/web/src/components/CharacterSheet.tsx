@@ -6,6 +6,7 @@ import { studioCharacter } from '@/figure/studio';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
 import { frameFromProse, modelFor } from '@/figure/vrm/models';
 import { desktop } from '@/lib/desktop';
+import { LoreFacts, LoreNote } from './Compendium';
 import { TalentTree } from './TalentTree';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
@@ -166,6 +167,10 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
           Values marked ? were carried in from books that were not fully read. Click a value to confirm or correct it.
         </p>
       )}
+      <Section id={`${sheet.characterId}:story`} title="Story so far" count={sheet.lore.length ? `${sheet.lore.length}` : undefined}>
+        <LoreFacts facts={sheet.lore} flat={flat} onJump={onJump} limit={6} />
+        <LoreNote entryKey={`char:${sheet.characterId}`} />
+      </Section>
       {sheet.panels.filter((p) => p !== 'equipment').map((p) => (
         <Section key={p} id={`${sheet.characterId}:${p}`} title={TITLES[p]} count={count(sheet, p)}>
           {body(sheet, p, warnings.filter((w) => w.characterId === sheet.characterId), onJump, correct, wearable, putOn, paths)}

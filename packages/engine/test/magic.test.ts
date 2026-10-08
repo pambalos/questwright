@@ -59,6 +59,7 @@ describe('magic systems', () => {
     const { project: read, proposals } = applyExtraction(project, 'p1', BOOK.chapters[0]!.paragraphs[0]!.text, {
       characters: [],
       changes: [{ kind: 'magic_system', character: 'Russ', name: 'qi cultivation', amount: null, slot: null, rarity: null, system: null, requires: null, quote: 'breathed until the ground hummed back' }],
+      lore: [],
     }, ids());
     expect(proposals).toBe(1);
     const claimed = { ...read, records: read.records.map((r) => (r.status === 'proposed' ? { ...r, status: 'applied' as const } : r)) };

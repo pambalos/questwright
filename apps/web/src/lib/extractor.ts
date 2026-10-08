@@ -23,12 +23,13 @@ function requestFor(s: StudioState, pid: string) {
         .filter((c) => !c.mergedInto)
         .map((c) => ({ name: c.name, aliases: c.aliases })),
       world: before.world,
+      compendium: before.compendium.map((e) => e.name).slice(0, 400),
       sheets: Object.values(before.sheets)
         .filter((sh) => sh.promoted)
         .map((sh) => summarizeSheet(name(sh.characterId), sh)),
       parsed: s.project.records
         .filter((r) => r.paragraphId === pid && r.source === 'parser')
-        .map((r) => (r.change.kind === 'merge' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
+        .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
     },
   };
 }
@@ -57,7 +58,7 @@ async function run(pid: string) {
 const BATCH_PARAGRAPHS = 40;
 const BATCH_CHARS = 24000;
 
-/** The first run of consecutive queued paragraphs in one chapter, in manuscript order. */
+/** Queued paragraphs from the first one onwards, within one chapter and in manuscript order, up to the batch limits. */
 function pickBatch(s: StudioState, ready: (pid: string) => boolean): string[] {
   const flat = flatten(s.manuscript);
   const queued = new Set(s.queue.filter(ready));
@@ -67,7 +68,9 @@ function pickBatch(s: StudioState, ready: (pid: string) => boolean): string[] {
   let chars = 0;
   for (let i = start; i < flat.length; i++) {
     const p = flat[i]!;
-    if (!queued.has(p.id) || p.chapterIndex !== flat[start]!.chapterIndex) break;
+    if (p.chapterIndex !== flat[start]!.chapterIndex) break;
+    // System boxes and paragraphs already read sit between prose; the run carries on past them.
+    if (!queued.has(p.id)) continue;
     if (out.length && (out.length >= BATCH_PARAGRAPHS || chars + p.text.length > BATCH_CHARS)) break;
     out.push(p.id);
     chars += p.text.length;
@@ -91,17 +94,23 @@ async function runBatch(pids: string[]) {
       headers: { 'content-type': 'application/json', 'x-qw-access': s.accessCode },
       body: JSON.stringify({
         mode: 'batch',
-        paragraphs: items.map((p) => ({
-          text: p.text,
-          parsed: s.project.records
-            .filter((r) => r.paragraphId === p.id && r.source === 'parser')
-            .map((r) => (r.change.kind === 'merge' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
-        })),
+        paragraphs: items.map((p, i) => {
+          // System boxes skipped since the previous paragraph sent still count as already tracked here.
+          const from = i === 0 ? p.index : items[i - 1]!.index + 1;
+          const covered = new Set(flat.slice(from, p.index + 1).map((x) => x.id));
+          return {
+            text: p.text,
+            parsed: s.project.records
+              .filter((r) => covered.has(r.paragraphId) && r.source === 'parser')
+              .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
+          };
+        }),
         previous: flat[first.index - 1]?.text,
         characters: Object.values(s.project.characters)
           .filter((c) => !c.mergedInto)
           .map((c) => ({ name: c.name, aliases: c.aliases })),
         world: before.world,
+        compendium: before.compendium.map((e) => e.name).slice(0, 400),
         sheets: Object.values(before.sheets)
           .filter((sh) => sh.promoted)
           .map((sh) => summarizeSheet(name(sh.characterId), sh)),

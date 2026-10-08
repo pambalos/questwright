@@ -52,6 +52,7 @@ const Body = z.object({
   characters: z.array(z.object({ name: short, aliases: z.array(short).max(50) })).max(500),
   world: World,
   sheets: z.array(z.string().max(4000)).max(200),
+  compendium: z.array(short).max(1000).optional(),
   parsed: Parsed,
 });
 
@@ -62,6 +63,7 @@ const BatchBody = z.object({
   characters: Known,
   world: World,
   sheets: z.array(z.string().max(4000)).max(200),
+  compendium: z.array(short).max(1000).optional(),
 });
 
 const fail = (status: number, error: string) => NextResponse.json({ error }, { status });

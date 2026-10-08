@@ -77,6 +77,7 @@ export function resolveDrafts(reg: Registry, drafts: Change[]): { changes: Chang
   };
   const changes = drafts.map((d): Change => {
     if (d.kind === 'merge') return { ...d, from: idFor(d.from), into: idFor(d.into) };
+    if (d.kind === 'lore') return d.character ? { ...d, character: idFor(d.character) } : d;
     return { ...d, character: idFor(d.character) };
   });
   return { changes, registry: reg, created };
