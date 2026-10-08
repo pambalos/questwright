@@ -32,6 +32,8 @@ import { ACHIEVEMENTS } from './achievements';
 import { snapshot, unlockToasts, type Snapshot, type Toast } from './unlocks';
 
 export type AiStatus = 'checking' | 'on' | 'off' | 'locked';
+/** The character panel beside the editor, a slim bar of icons, or the whole work area. */
+export type PanelMode = 'open' | 'mini' | 'full';
 /** Where AI reading runs: an API key, or the author's Claude subscription through Claude Code. */
 export interface AiBackend {
   kind: 'api' | 'claude-cli';
@@ -69,6 +71,9 @@ interface Persisted {
   accessCode: string;
   /** Author achievements earned in this browser. */
   achievements: string[];
+  /** Width of the character panel beside the editor, in pixels. */
+  panelWidth: number;
+  panelMode: PanelMode;
 }
 
 export interface StudioState extends Persisted {
@@ -109,6 +114,8 @@ export interface StudioState extends Persisted {
   toggleAppearanceLock(characterId: string): void;
   drawCharacter(characterId: string): void;
   setArtStyle(style: ArtStyle): void;
+  setPanelWidth(px: number): void;
+  setPanelMode(mode: PanelMode): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
   setValue(pid: string, characterId: string, kind: 'currency' | 'item', name: string, value: number): void;
   /** The author's own notes on a compendium entry (or a character's story). */
@@ -232,6 +239,8 @@ export const useStudio = create<StudioState>()(
         aiEnabled: true,
         accessCode: '',
         achievements: [],
+        panelWidth: 420,
+        panelMode: 'open',
         flash: [],
         hydrated: false,
         skimming: null,
@@ -328,6 +337,12 @@ export const useStudio = create<StudioState>()(
           if (!c) return;
           c.drawn = true;
           set({ project });
+        },
+        setPanelWidth(panelWidth) {
+          set({ panelWidth: Math.round(panelWidth) });
+        },
+        setPanelMode(panelMode) {
+          set({ panelMode });
         },
         setArtStyle(style) {
           set({ project: { ...get().project, art: { style } } });
@@ -506,7 +521,7 @@ export const useStudio = create<StudioState>()(
       onRehydrateStorage: () => () => {
         useStudio.setState((s) => ({ hydrated: true, docVersion: s.docVersion + 1 }));
       },
-      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements }),
+      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements, panelWidth: s.panelWidth, panelMode: s.panelMode }),
       merge: (persisted, current) => {
         const p = persisted as Partial<Persisted> | undefined;
         if (!p?.project || !p.doc) return current;
