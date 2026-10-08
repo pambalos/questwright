@@ -9,8 +9,8 @@ and continuity checks catch the math before readers do.
 
 ## What works today
 
-- **Editor** (TipTap) with chapters as headings. Paragraphs carry stable ids, so every
-  change is tied to the words it came from.
+- **Editor** (TipTap). Level-1 headings are books, level-2 headings are chapters. Paragraphs
+  carry stable ids, so every change is tied to the words it came from.
 - **System boxes apply instantly.** Bracketed lines (`[Skill Acquired: Flame Ward (Lv 1)]`,
   `[Level Up! Level 2]`, `+2 STR · +1 VIT`, `[Title Earned: Wolfbane]`, `+50 Gold`, …) are
   parsed with fixed rules: no AI, no cost.
@@ -20,15 +20,25 @@ and continuity checks catch the math before readers do.
 - **Characters** start as roster cards and get a tab on their first stat, skill, item or
   currency, or when pinned. Aliases and "same person as" merges, including merges the AI
   proposes when the text reveals an identity.
+- **Full-body characters.** A rotatable, zoomable 3D figure (Portrait and Body views) wears
+  what the sheet says: weapons, sheaths, shields, armour, rings, potions, a coin pouch, pelts,
+  skill effects, blessings, title trophies, scars. Hover an equipment slot to light its item.
+  2D figures for roster cards and tab icons, and as the fallback without WebGL. Looks come
+  from the prose and can be edited or locked; three art styles.
 - **Panels unlock as the story needs them**: stats, equipment slots, inventory, skills,
   currencies, blessings, titles. The World tab lists the system's definitions.
 - **The panel follows the cursor.** Click into chapter 3 and every sheet shows chapter 3.
   The timeline slider replays the story.
 - **Continuity checks**: balances below zero, items given up that were never held, a skill
   evolving from one never gained, a level going down. Flagged in the margin and on the sheet.
-- **Local save** in the browser, plus export and import as JSON.
-
-Next milestones: the 3D character figure, and series import with limited, newest-first backfill.
+  Click any balance or item count to correct it from that point on.
+- **Series import with limited backfill.** Import one file per book (.txt, .md, .docx) and
+  choose how many of the latest books to track. Earlier books are archived read-only and
+  their system boxes are still parsed for free; AI reading covers the tracked books, newest
+  first; an optional skim collects earlier books' characters. Balances carried into the
+  tracked books are marked "?" until confirmed.
+- **Author progression**: word-count levels and achievements.
+- **Saves in the browser** (IndexedDB), plus export and import as JSON.
 
 ## Layout
 
@@ -36,9 +46,10 @@ Next milestones: the 3D character figure, and series import with limited, newest
 packages/engine   Headless tracking engine. No UI, no network. Unit tested.
   parser.ts       Tier 1: system-box rules
   extraction.ts   Tier 2: the model's output schema, prompt, and conversion to proposals
+  import.ts       Splits book files into chapters and paragraphs
   reconcile.ts    Keeps the change log in step with an edited manuscript
   ledger.ts       Folds the change log into character sheets as of any paragraph
-apps/web          Next.js app: editor, panel, and the /api/extract route
+apps/web          Next.js app: editor, panel, figures (src/figure), and the /api/extract route
 ```
 
 ## Running it
@@ -69,4 +80,14 @@ npm run build
 - The key stays on the server. **Before deploying anywhere public, set `QW_ACCESS_CODE`**
   or put the deployment behind Vercel's deployment protection; otherwise anyone who finds
   the URL can spend your key. With a code set, the app asks for it once per browser.
+- A series import asks before queueing work and shows the request count. The optional skim
+  of earlier books is one request per chapter.
 - The manuscript leaves the browser only for these extraction requests.
+
+## Known gaps
+
+- Figures are built from simple shapes on a fixed skeleton. Generated, rigged models per
+  character would attach to the same points; that pipeline is not built yet.
+- `npm audit` flags PostCSS inside Next 15's build tooling (it only processes this app's own
+  CSS) and an `argparse` issue in mammoth's command-line tool, which the app does not use.
+  Clearing the first needs Next 16.
