@@ -4,6 +4,7 @@ import { wordCount } from '@questwright/engine';
 import { useRef, useState } from 'react';
 import { desktop } from '@/lib/desktop';
 import { useStudio } from '@/lib/store';
+import { ApiKeyDialog } from './ApiKeyDialog';
 import { SeriesImport } from './SeriesImport';
 
 const WORDS_PER_LEVEL = 500;
@@ -12,6 +13,7 @@ export function Header() {
   const s = useStudio();
   const fileRef = useRef<HTMLInputElement>(null);
   const [series, setSeries] = useState(false);
+  const [keyOpen, setKeyOpen] = useState(false);
   const words = wordCount(s.manuscript);
   const level = Math.floor(words / WORDS_PER_LEVEL) + 1;
   const pct = ((words % WORDS_PER_LEVEL) / WORDS_PER_LEVEL) * 100;
@@ -60,26 +62,11 @@ export function Header() {
       </div>
       <span className={`pill ${ai.cls}`}><span className="dot" />{ai.text}</span>
       {desktop() && (
-        <button
-          className="btn"
-          onClick={async () => {
-            const key = window.prompt(
-              s.aiStatus === 'off'
-                ? 'Paste your Anthropic API key. It is stored encrypted on this computer and only sent to Anthropic.'
-                : 'Paste a new Anthropic API key, or leave this empty to remove the saved key.',
-            );
-            if (key === null) return;
-            try {
-              await desktop()!.setApiKey(key.trim() || null);
-              window.location.reload();
-            } catch (e) {
-              s.toast({ kind: 'error', head: 'API key not saved', body: e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : 'Try again.' });
-            }
-          }}
-        >
+        <button className="btn" onClick={() => setKeyOpen(true)}>
           {s.aiStatus === 'off' ? 'Add API key' : 'API key'}
         </button>
       )}
+      {keyOpen && <ApiKeyDialog hasKey={s.aiStatus !== 'off'} onClose={() => setKeyOpen(false)} />}
       {s.aiStatus === 'on' && (
         <button className="btn" onClick={() => s.setAiEnabled(!s.aiEnabled)}>{s.aiEnabled ? 'Pause AI' : 'Resume AI'}</button>
       )}

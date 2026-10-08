@@ -223,6 +223,9 @@ button.cell { color: inherit; font: inherit; cursor: pointer; }
 .dlg label { font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
 .dlg label.check { justify-content: flex-start; align-items: flex-start; color: var(--hud-dim); }
 .dlg input[type=range] { width: 100%; accent-color: var(--gold); }
+.dlg .key-input { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--hud-line); background: var(--hud-3); color: var(--hud-text); font: 13px ui-monospace, monospace; }
+.dlg .key-input:focus { outline: none; border-color: var(--gold); }
+.dlg .err { color: #f08a7a; }
 .books { display: grid; gap: 3px; }
 .books i { height: 22px; border-radius: 2px; background: var(--hud-3); border: 1px solid var(--hud-line); }
 .books i.win { background: var(--gold-soft); border-color: var(--gold); }
