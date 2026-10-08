@@ -38,6 +38,11 @@ export function ApiKeyDialog({ hasKey, onClose }: { hasKey: boolean; onClose: ()
           With a key, Claude reads each paragraph you write or paste and tracks characters, items and changes that are not in system boxes. The key is stored
           encrypted on this computer and only sent to Anthropic.
         </p>
+        <p>
+          {hasKey
+            ? 'Remove the key to read with your Claude subscription instead, through Claude Code on this computer.'
+            : 'Without a key, Questwright reads with your Claude subscription through Claude Code on this computer, when Claude Code is installed and signed in. That shares your plan’s usage limits.'}
+        </p>
         <input
           className="key-input"
           type="password"

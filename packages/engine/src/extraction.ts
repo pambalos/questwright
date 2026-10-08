@@ -66,9 +66,7 @@ export function skimPrompt(chapter: string, known: { name: string; aliases: stri
   return `Known characters: ${k}\n\n<chapter>\n${chapter}\n</chapter>`;
 }
 
-export const EXTRACTION_SYSTEM = `You keep the character sheets for a LitRPG novel while the author writes it. You read one paragraph at a time and report what happens to the characters' game state in that paragraph.
-
-Rules:
+const EXTRACTION_RULES = `Rules:
 - Report only events the paragraph narrates as happening now. Skip plans, wishes, hypotheticals ("if I had a sword"), questions, lies, dreams, and things a character only looks at or talks about.
 - Bracketed system messages are tracked separately. Do not report anything a bracketed message already states; the changes it produced are listed for you.
 - Attribute each change to the character it happens to. Use the known name or alias when the paragraph refers to a known character, including by pronoun when the previous paragraph makes the referent clear.
@@ -80,6 +78,63 @@ Rules:
 - characters: every named or clearly identified character present in the paragraph. role and description only from what the text says, otherwise null. look: only traits the text states (a grey cloak is outfit "cloak" and clothColor "#7d7f86"; colours as #rrggbb hex), otherwise null fields or null. sameAs: when the paragraph reveals that a name belongs to someone already known (the stranger turns out to be Lyra), give the known name; otherwise null.
 - quote: the shortest exact span of the paragraph that shows the change, copied character for character.
 Return empty lists when nothing applies.`;
+
+export const EXTRACTION_SYSTEM = `You keep the character sheets for a LitRPG novel while the author writes it. You read one paragraph at a time and report what happens to the characters' game state in that paragraph.
+
+${EXTRACTION_RULES}`;
+
+/**
+ * Batch reading: several consecutive paragraphs in one request, for backends
+ * where each request is costly to start (the Claude Code CLI on a subscription).
+ */
+export const BatchExtractionSchema = z.object({
+  paragraphs: z.array(ExtractionSchema.extend({ n: z.number().int() })),
+});
+export type BatchExtraction = z.infer<typeof BatchExtractionSchema>;
+
+export const BATCH_EXTRACTION_SYSTEM = `You keep the character sheets for a LitRPG novel while the author writes it. You read a passage of consecutive numbered paragraphs and report, paragraph by paragraph, what happens to the characters' game state.
+
+Return one entry per paragraph that has characters or changes, with n set to that paragraph's number; leave out paragraphs where nothing applies. Each change belongs to the paragraph that narrates it, and its quote is copied from that paragraph. Changes earlier in the passage are already true for later paragraphs. Every rule below applies to each paragraph on its own.
+
+${EXTRACTION_RULES}`;
+
+export interface BatchExtractionInput {
+  paragraphs: { text: string; parsed: string[] }[];
+  previous?: string;
+  characters: { name: string; aliases: string[] }[];
+  world: WorldDefs;
+  sheets: string[];
+}
+
+/** Everything the model needs to read a run of paragraphs, as plain text. */
+export function batchExtractionPrompt(input: BatchExtractionInput): string {
+  const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none yet');
+  const paragraphs = input.paragraphs.map((p, i) => {
+    const parsed = p.parsed.length ? `\n(Already tracked from system messages in this paragraph: ${p.parsed.join('; ')})` : '';
+    return `<paragraph n="${i + 1}">\n${p.text}${parsed}\n</paragraph>`;
+  });
+  return [
+    `Known characters: ${input.characters.length ? input.characters.map((c) => (c.aliases.length ? `${c.name} (also: ${c.aliases.join(', ')})` : c.name)).join('; ') : 'none yet'}`,
+    `World definitions. Currencies: ${list(input.world.currencies)}. Stats: ${list(input.world.stats)}. Equipment slots: ${list(input.world.slots)}. Skills: ${list(input.world.skills)}.`,
+    `Sheets before this passage:\n${input.sheets.length ? input.sheets.join('\n') : 'none yet'}`,
+    input.previous ? `<previous_paragraph>\n${input.previous}\n</previous_paragraph>` : '',
+    `<passage>\n${paragraphs.join('\n')}\n</passage>`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/** One reading per paragraph of the batch, in order; paragraphs the model left out read as empty. */
+export function splitBatch(result: BatchExtraction, count: number): Extraction[] {
+  const out: Extraction[] = Array.from({ length: count }, () => ({ characters: [], changes: [] }));
+  for (const { n, characters, changes } of result.paragraphs) {
+    const slot = out[n - 1];
+    if (!slot) continue;
+    slot.characters.push(...characters);
+    slot.changes.push(...changes);
+  }
+  return out;
+}
 
 export interface ExtractionInput {
   paragraph: string;

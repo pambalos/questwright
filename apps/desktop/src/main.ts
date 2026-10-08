@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, net, protocol, safeStorage, shell, utilityProcess, type UtilityProcess } from 'electron';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { format } from 'node:util';
 
 /**
@@ -72,6 +72,29 @@ function storeKey(key: string | null) {
   writeSettings(s);
 }
 
+/**
+ * The author's Claude Code CLI, used to read with their Claude subscription when
+ * no API key is saved. Apps opened from the dock or Start menu may not get the
+ * shell's PATH, so the usual install locations are checked as well.
+ */
+function findClaude(): string | undefined {
+  const exe = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  const home = app.getPath('home');
+  const dirs = [
+    ...(process.env.PATH ?? '').split(delimiter),
+    join(home, '.local', 'bin'),
+    join(home, '.claude', 'local'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+  ];
+  for (const dir of dirs) {
+    if (!dir) continue;
+    const p = join(dir, exe);
+    if (existsSync(p)) return p;
+  }
+  return undefined;
+}
+
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = createServer();
@@ -110,7 +133,8 @@ async function startServer() {
   if (!existsSync(script)) throw new Error(`Missing web build at ${script}. Run "npm run desktop:stage" first.`);
   port = await freePort();
   const key = apiKey();
-  log(`starting server ${script} on port ${port}`);
+  const claude = findClaude();
+  log(`starting server ${script} on port ${port} (AI: ${key ? 'API key' : claude ? `Claude Code at ${claude}` : 'none'})`);
   const child = utilityProcess.fork(script, [], {
     cwd: join(script, '..'),
     stdio: 'pipe',
@@ -122,6 +146,7 @@ async function startServer() {
       HOSTNAME: '127.0.0.1',
       NEXT_TELEMETRY_DISABLED: '1',
       ...(key ? { ANTHROPIC_API_KEY: key } : {}),
+      ...(claude ? { QW_CLAUDE_CLI: claude } : {}),
     },
   });
   server = child;

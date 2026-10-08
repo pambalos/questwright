@@ -2,7 +2,7 @@
 
 import { describeChange, flatten, fold, summarizeSheet } from '@questwright/engine';
 import { useEffect } from 'react';
-import { useStudio, type StudioState } from './store';
+import { useStudio, type AiBackend, type StudioState } from './store';
 
 const MAX_IN_FLIGHT = 2;
 /** How long the author must stop typing before the paragraph under the cursor is read. */
@@ -53,6 +53,70 @@ async function run(pid: string) {
   }
 }
 
+/** Subscription reading: up to this much consecutive prose goes in one request. */
+const BATCH_PARAGRAPHS = 40;
+const BATCH_CHARS = 24000;
+
+/** The first run of consecutive queued paragraphs in one chapter, in manuscript order. */
+function pickBatch(s: StudioState, ready: (pid: string) => boolean): string[] {
+  const flat = flatten(s.manuscript);
+  const queued = new Set(s.queue.filter(ready));
+  const start = flat.findIndex((p) => queued.has(p.id));
+  if (start < 0) return [];
+  const out: string[] = [];
+  let chars = 0;
+  for (let i = start; i < flat.length; i++) {
+    const p = flat[i]!;
+    if (!queued.has(p.id) || p.chapterIndex !== flat[start]!.chapterIndex) break;
+    if (out.length && (out.length >= BATCH_PARAGRAPHS || chars + p.text.length > BATCH_CHARS)) break;
+    out.push(p.id);
+    chars += p.text.length;
+  }
+  return out;
+}
+
+async function runBatch(pids: string[]) {
+  const s = useStudio.getState();
+  const flat = flatten(s.manuscript);
+  const items = pids.map((pid) => flat.find((x) => x.id === pid)).filter((p) => p !== undefined);
+  if (!items.length) return;
+  const first = items[0]!;
+  const before = fold(s.project, s.manuscript, first.index - 1);
+  const name = (id: string) => s.project.characters[id]?.name ?? id;
+  const sent = items.map((p) => ({ pid: p.id, sentText: p.text }));
+  for (const p of items) s.startExtraction(p.id);
+  try {
+    const res = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-qw-access': s.accessCode },
+      body: JSON.stringify({
+        mode: 'batch',
+        paragraphs: items.map((p) => ({
+          text: p.text,
+          parsed: s.project.records
+            .filter((r) => r.paragraphId === p.id && r.source === 'parser')
+            .map((r) => (r.change.kind === 'merge' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
+        })),
+        previous: flat[first.index - 1]?.text,
+        characters: Object.values(s.project.characters)
+          .filter((c) => !c.mergedInto)
+          .map((c) => ({ name: c.name, aliases: c.aliases })),
+        world: before.world,
+        sheets: Object.values(before.sheets)
+          .filter((sh) => sh.promoted)
+          .map((sh) => summarizeSheet(name(sh.characterId), sh)),
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { result?: unknown; error?: string };
+    if (res.status === 401) useStudio.getState().setAiStatus('locked');
+    if (!res.ok || !Array.isArray(data.result)) throw new Error(data.error ?? `The server answered ${res.status}.`);
+    const results = data.result as Parameters<StudioState['finishExtraction']>[2][];
+    useStudio.getState().finishExtractions(sent.map((x, i) => ({ ...x, result: results[i] ?? { characters: [], changes: [] } })));
+  } catch (e) {
+    useStudio.getState().failExtractions(sent, e instanceof Error ? e.message : 'Unknown error');
+  }
+}
+
 async function skim(chapterId: string) {
   const s = useStudio.getState();
   const chapter = s.project.archive?.chapters.find((c) => c.id === chapterId);
@@ -81,11 +145,21 @@ export function useExtractor() {
   useEffect(() => {
     const tick = () => {
       const s = useStudio.getState();
-      if (!s.hydrated || s.aiStatus !== 'on' || !s.aiEnabled || s.inFlight.length >= MAX_IN_FLIGHT) return;
+      if (!s.hydrated || s.aiStatus !== 'on' || !s.aiEnabled) return;
+      const batched = s.aiBackend?.kind === 'claude-cli';
+      // Each subscription request is a Claude Code run, so they go one at a time.
+      if (s.inFlight.length >= (batched ? 1 : MAX_IN_FLIGHT)) return;
       const idle = Date.now() - s.lastEditAt > IDLE_MS;
       const texts = new Map(s.manuscript.chapters.flatMap((c) => c.paragraphs).map((p) => [p.id, p.text]));
-      const pid = s.queue.find((id) => !s.inFlight.includes(id) && (idle || id !== s.cursorPid) && s.failed[id] !== texts.get(id));
-      if (pid) return void run(pid);
+      const ready = (id: string) => !s.inFlight.includes(id) && (idle || id !== s.cursorPid) && s.failed[id] !== texts.get(id);
+      if (batched) {
+        // Wait for a pause in typing so a batch is not cut short by the paragraph being written.
+        const pids = idle ? pickBatch(s, ready) : [];
+        if (pids.length) return void runBatch(pids);
+      } else {
+        const pid = s.queue.find(ready);
+        if (pid) return void run(pid);
+      }
       const next = s.project.skimPending?.[0];
       if (next && !s.skimming && !s.queue.length && !s.inFlight.length) void skim(next);
     };
@@ -101,9 +175,13 @@ export function useAiStatus() {
   useEffect(() => {
     let live = true;
     fetch('/api/status', { headers: { 'x-qw-access': code } })
-      .then((r) => r.json() as Promise<{ ai: boolean; locked: boolean }>)
-      .then((d) => live && setAiStatus(!d.ai ? 'off' : d.locked ? 'locked' : 'on'))
-      .catch(() => live && setAiStatus('off'));
+      .then((r) => r.json() as Promise<{ ai: boolean; locked: boolean; backend: AiBackend['kind'] | null; plan: string | null; cliSignedOut?: boolean }>)
+      .then((d) => {
+        if (!live) return;
+        const backend = d.backend ? { kind: d.backend, plan: d.plan, signedOut: d.cliSignedOut } : null;
+        setAiStatus(!d.ai ? 'off' : d.locked ? 'locked' : 'on', backend);
+      })
+      .catch(() => live && setAiStatus('off', null));
     return () => {
       live = false;
     };

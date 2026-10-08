@@ -20,11 +20,13 @@ export function Header() {
 
   const ai = (() => {
     if (s.aiStatus === 'checking') return { cls: '', text: 'Checking AI…' };
-    if (s.aiStatus === 'off') return { cls: 'off', text: desktop() ? 'AI reading off: no API key' : 'AI reading off: no server key' };
+    if (s.aiStatus === 'off' && s.aiBackend?.signedOut) return { cls: 'off', text: 'AI reading off: Claude Code is signed out' };
+    if (s.aiStatus === 'off') return { cls: 'off', text: desktop() ? 'AI reading off: no API key or Claude Code' : 'AI reading off: no server key' };
     if (s.aiStatus === 'locked') return { cls: 'off', text: 'AI reading locked' };
     if (!s.aiEnabled) return { cls: '', text: 'AI reading paused' };
     if (s.inFlight.length) return { cls: 'busy', text: `Reading ${s.inFlight.length} paragraph${s.inFlight.length > 1 ? 's' : ''}…` };
-    return { cls: 'on', text: s.queue.length ? `AI reading on · ${s.queue.length} waiting` : 'AI reading on' };
+    const via = s.aiBackend?.kind === 'claude-cli' ? ` · Claude ${s.aiBackend.plan ? s.aiBackend.plan[0]!.toUpperCase() + s.aiBackend.plan.slice(1) : 'subscription'}` : '';
+    return { cls: 'on', text: s.queue.length ? `AI reading on${via} · ${s.queue.length} waiting` : `AI reading on${via}` };
   })();
 
   const exportBook = () => {
@@ -63,10 +65,10 @@ export function Header() {
       <span className={`pill ${ai.cls}`}><span className="dot" />{ai.text}</span>
       {desktop() && (
         <button className="btn" onClick={() => setKeyOpen(true)}>
-          {s.aiStatus === 'off' ? 'Add API key' : 'API key'}
+          {s.aiBackend?.kind === 'api' ? 'API key' : 'Add API key'}
         </button>
       )}
-      {keyOpen && <ApiKeyDialog hasKey={s.aiStatus !== 'off'} onClose={() => setKeyOpen(false)} />}
+      {keyOpen && <ApiKeyDialog hasKey={s.aiBackend?.kind === 'api'} onClose={() => setKeyOpen(false)} />}
       {s.aiStatus === 'on' && (
         <button className="btn" onClick={() => s.setAiEnabled(!s.aiEnabled)}>{s.aiEnabled ? 'Pause AI' : 'Resume AI'}</button>
       )}

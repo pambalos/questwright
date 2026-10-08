@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyExtraction, applySkim, extractionPrompt, ExtractionSchema, type Extraction } from '../src/extraction';
+import { applyExtraction, applySkim, batchExtractionPrompt, BatchExtractionSchema, extractionPrompt, ExtractionSchema, splitBatch, type Extraction } from '../src/extraction';
 import { fold } from '../src/ledger';
 import { SAMPLE } from '../src/sample';
 import { ids, parsedProject } from './helpers';
@@ -68,6 +68,26 @@ describe('AI extraction contract', () => {
     expect(text).toContain('Kael (also: the boy)');
     expect(text).toContain('<paragraph>\nHe paid.\n</paragraph>');
     expect(text).toContain('Kael: 15 Gold');
+  });
+});
+
+describe('batch reading', () => {
+  it('numbers the paragraphs and notes what system boxes already tracked', () => {
+    const text = batchExtractionPrompt({
+      paragraphs: [{ text: 'Kael walked in.', parsed: [] }, { text: 'He paid.', parsed: ['Kael: -5 Gold'] }],
+      characters: [{ name: 'Kael', aliases: [] }], world: { currencies: ['Gold'], stats: [], slots: [], skills: [], blessings: [] }, sheets: [],
+    });
+    expect(text).toContain('<paragraph n="1">\nKael walked in.\n</paragraph>');
+    expect(text).toContain('<paragraph n="2">\nHe paid.\n(Already tracked from system messages in this paragraph: Kael: -5 Gold)\n</paragraph>');
+  });
+
+  it('splits a reading back into one per paragraph, empty where the model left one out', () => {
+    const result = BatchExtractionSchema.parse({ paragraphs: [{ n: 2, ...reading }, { n: 9, ...reading }] });
+    const split = splitBatch(result, 3);
+    expect(split).toHaveLength(3);
+    expect(split[0]).toEqual({ characters: [], changes: [] });
+    expect(split[1]).toEqual(reading);
+    expect(split[2]).toEqual({ characters: [], changes: [] });
   });
 });
 
