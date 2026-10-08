@@ -1,6 +1,6 @@
 import { flatten, hashText, isSystemBox, type PlacedParagraph } from './manuscript';
 import { parseParagraph } from './parser';
-import { resolveDrafts } from './registry';
+import { repairMerges, resolveDrafts } from './registry';
 import type { ChangeRecord, Manuscript, Project } from './types';
 
 export interface ReconcileResult {
@@ -21,6 +21,7 @@ const MECHANIC = new Set(['stat', 'class', 'title', 'currency', 'skill', 'item',
  */
 export function reconcile(input: Project, manuscript: Manuscript, newId: () => string): ReconcileResult {
   const project: Project = structuredClone(input);
+  repairMerges(project.characters);
   const flat = flatten(manuscript);
   const byId = new Map(flat.map((p) => [p.id, p]));
   const hash = new Map(flat.map((p) => [p.id, hashText(p.text)]));

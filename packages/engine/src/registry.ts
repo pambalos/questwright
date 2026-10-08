@@ -18,6 +18,29 @@ export function canonical(reg: Registry, id: string): string {
   return cur;
 }
 
+/**
+ * Breaks merge loops (A merged into B and B into A), which hide every
+ * character in the loop. The one added to the registry first stays the
+ * canonical entry. Mutates `reg`; returns the ids it restored.
+ */
+export function repairMerges(reg: Registry): string[] {
+  const restored: string[] = [];
+  for (const id of Object.keys(reg)) {
+    const seen: string[] = [];
+    let cur: string | undefined = id;
+    while (cur && reg[cur]?.mergedInto && !seen.includes(cur)) {
+      seen.push(cur);
+      cur = reg[cur]!.mergedInto;
+    }
+    if (!cur || !seen.includes(cur)) continue;
+    const loop = seen.slice(seen.indexOf(cur));
+    const keep = Object.keys(reg).find((k) => loop.includes(k))!;
+    delete reg[keep]!.mergedInto;
+    restored.push(keep);
+  }
+  return restored;
+}
+
 /** Finds a character by name or alias, ignoring case and a leading "the". */
 export function findByName(reg: Registry, name: string): Character | undefined {
   const norm = (s: string) => s.trim().toLowerCase().replace(/^the\s+/, '');
@@ -60,7 +83,11 @@ export function resolveDrafts(reg: Registry, drafts: Change[]): { changes: Chang
 }
 
 /** Applies an accepted merge: `from` becomes an alias of `into`. */
-export function applyMerge(reg: Registry, from: string, into: string): void {
+export function applyMerge(reg: Registry, fromId: string, intoId: string): void {
+  // Merge who each name already stands for, so "B is A" after "A is B" changes nothing
+  // instead of pointing the two at each other and hiding both.
+  const from = canonical(reg, fromId);
+  const into = canonical(reg, intoId);
   const a = reg[from];
   const b = reg[into];
   if (!a || !b || from === into) return;
