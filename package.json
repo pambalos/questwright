@@ -1,0 +1,12 @@
+{
+  "name": "questwright",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm run dev -w @questwright/web",
+    "build": "npm run build -w @questwright/web",
+    "test": "npm test -w @questwright/engine",
+    "typecheck": "npm run typecheck -w @questwright/engine && npm run typecheck -w @questwright/web",
+    "lint": "npm run lint -w @questwright/web"
+  }
+}
