@@ -1,0 +1,33 @@
+appId: app.questwright.desktop
+productName: Questwright
+copyright: Copyright © 2026 Bradley Justice
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: web
+    to: web
+    filter:
+      - "**/*"
+asar: true
+# No auto-update feed yet.
+publish: null
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+win:
+  target:
+    - nsis
+linux:
+  executableName: questwright
+  category: Office
+  target:
+    - AppImage
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

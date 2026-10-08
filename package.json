@@ -1,12 +1,18 @@
 {
   "name": "questwright",
   "private": true,
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "npm run dev -w @questwright/web",
     "build": "npm run build -w @questwright/web",
     "test": "npm test -w @questwright/engine",
-    "typecheck": "npm run typecheck -w @questwright/engine && npm run typecheck -w @questwright/web",
-    "lint": "npm run lint -w @questwright/web"
+    "typecheck": "npm run typecheck -w @questwright/engine && npm run typecheck -w @questwright/web && npm run typecheck -w @questwright/desktop",
+    "lint": "npm run lint -w @questwright/web",
+    "desktop:stage": "npm run build -w @questwright/web && npm run stage -w @questwright/desktop",
+    "desktop": "npm run desktop:stage && npm run start -w @questwright/desktop",
+    "desktop:dist": "npm run desktop:stage && npm run dist -w @questwright/desktop"
   }
 }

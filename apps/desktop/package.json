@@ -1,0 +1,26 @@
+{
+  "name": "@questwright/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Questwright desktop app",
+  "author": "Bradley Justice",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "stage": "node scripts/stage-web.mjs",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && npm run stage && electron-builder --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.0",
+    "electron": "37.10.3",
+    "electron-builder": "26.0.12",
+    "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pambalos/questwright"
+  },
+  "homepage": "https://github.com/pambalos/questwright"
+}
