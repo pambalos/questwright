@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyExtraction, extractionPrompt, ExtractionSchema, type Extraction } from '../src/extraction';
+import { applyExtraction, applySkim, extractionPrompt, ExtractionSchema, type Extraction } from '../src/extraction';
 import { fold } from '../src/ledger';
 import { SAMPLE } from '../src/sample';
 import { ids, parsedProject } from './helpers';
@@ -68,5 +68,17 @@ describe('AI extraction contract', () => {
     expect(text).toContain('Kael (also: the boy)');
     expect(text).toContain('<paragraph>\nHe paid.\n</paragraph>');
     expect(text).toContain('Kael: 15 Gold');
+  });
+});
+
+describe('skim', () => {
+  it('adds the cast of a chapter, seen where each is first named', () => {
+    const base = parsedProject(SAMPLE).project;
+    const ch1 = SAMPLE.chapters[0]!;
+    const { project, created } = applySkim(base, ch1, { characters: [{ name: 'Bram', role: 'Merchant', description: null, sameAs: null, look: null }] }, ids());
+    expect(created).toEqual(['bram']);
+    const st = fold(project, SAMPLE);
+    expect(st.sheets.bram!.firstSeen).toBe(5);
+    expect(project.extracted.p1).toBeUndefined();
   });
 });

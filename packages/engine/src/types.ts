@@ -105,6 +105,10 @@ export interface Project {
    * so balances carried into it are shown as unconfirmed until the author sets them.
    */
   window?: { startParagraphId: string };
+  /** Earlier books of a series, kept read-only outside the editor. Their system boxes are still tracked. */
+  archive?: Manuscript;
+  /** Chapters of archived books still waiting for a character skim. */
+  skimPending?: string[];
   art?: { style: ArtStyle };
 }
 

@@ -15,12 +15,15 @@ export function Studio() {
   const manuscript = useStudio((s) => s.manuscript);
   const cursorPid = useStudio((s) => s.cursorPid);
   const scrub = useStudio((s) => s.scrub);
+  const hydrated = useStudio((s) => s.hydrated);
 
   const flat = useMemo(() => flatten(manuscript), [manuscript]);
   const cursorIndex = flat.find((p) => p.id === cursorPid)?.index;
   const viewIndex = scrub ?? cursorIndex ?? flat.length - 1;
   const latest = useMemo(() => fold(project, manuscript), [project, manuscript]);
   const view = useMemo(() => fold(project, manuscript, viewIndex), [project, manuscript, viewIndex]);
+
+  if (!hydrated) return <p style={{ padding: 24 }}>Opening your book…</p>;
 
   return (
     <div className="app">

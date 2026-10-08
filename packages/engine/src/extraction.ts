@@ -55,6 +55,17 @@ export const ExtractionSchema = z.object({
 });
 export type Extraction = z.infer<typeof ExtractionSchema>;
 
+/** Skim mode: only who appears in a whole chapter, for books outside the read window. */
+export const SkimSchema = z.object({ characters: ExtractionSchema.shape.characters });
+export type Skim = z.infer<typeof SkimSchema>;
+
+export const SKIM_SYSTEM = `You build the cast list for an earlier book in a LitRPG series so the author's character roster is complete. Read the chapter and list every named or clearly identified character who appears in it. role, description and look only from what the text says, otherwise null; colours as #rrggbb hex. sameAs: when the chapter reveals that a name belongs to someone already known, give the known name; otherwise null. Do not list game changes.`;
+
+export function skimPrompt(chapter: string, known: { name: string; aliases: string[] }[]): string {
+  const k = known.length ? known.map((c) => (c.aliases.length ? `${c.name} (also: ${c.aliases.join(', ')})` : c.name)).join('; ') : 'none yet';
+  return `Known characters: ${k}\n\n<chapter>\n${chapter}\n</chapter>`;
+}
+
 export const EXTRACTION_SYSTEM = `You keep the character sheets for a LitRPG novel while the author writes it. You read one paragraph at a time and report what happens to the characters' game state in that paragraph.
 
 Rules:
@@ -267,6 +278,32 @@ export function applyExtraction(
   project.records = [...project.records.filter((r) => !stale(r)), ...records];
   project.extracted[paragraphId] = textHash;
   return { project, proposals, created };
+}
+
+/**
+ * Records a skimmed chapter: each character joins the roster, seen at the first
+ * paragraph of the chapter that names them. Pure: returns a new project.
+ */
+export function applySkim(
+  input: Project,
+  chapter: { paragraphs: { id: string; text: string }[] },
+  result: Skim,
+  newId: () => string,
+): { project: Project; created: string[] } {
+  const extracted = applyExtraction(input, chapter.paragraphs[0]!.id, chapter.paragraphs[0]!.text, { characters: result.characters, changes: [] }, newId);
+  const project = extracted.project;
+  // Move each appearance to the paragraph that actually names the character.
+  for (const r of project.records) {
+    if (r.paragraphId !== chapter.paragraphs[0]!.id || r.source !== 'ai' || r.change.kind !== 'mention') continue;
+    const name = project.characters[r.change.character]?.name.toLowerCase();
+    const at = name ? chapter.paragraphs.find((p) => p.text.toLowerCase().includes(name)) : undefined;
+    if (at) {
+      r.paragraphId = at.id;
+      r.textHash = hashText(at.text);
+    }
+  }
+  delete project.extracted[chapter.paragraphs[0]!.id];
+  return { project, created: extracted.created };
 }
 
 function withCanonical(c: Change, p: Project): Change {

@@ -53,16 +53,41 @@ async function run(pid: string) {
   }
 }
 
-/** Reads finished paragraphs in the background, a couple at a time. */
+async function skim(chapterId: string) {
+  const s = useStudio.getState();
+  const chapter = s.project.archive?.chapters.find((c) => c.id === chapterId);
+  if (!chapter) return s.failSkim(chapterId, 'That chapter is no longer in the archive.');
+  s.startSkim(chapterId);
+  try {
+    const res = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-qw-access': s.accessCode },
+      body: JSON.stringify({
+        mode: 'skim',
+        chapter: chapter.paragraphs.map((p) => p.text).join('\n\n').slice(0, 200000),
+        characters: Object.values(s.project.characters).filter((c) => !c.mergedInto).map((c) => ({ name: c.name, aliases: c.aliases })),
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { result?: unknown; error?: string };
+    if (!res.ok || !data.result) throw new Error(data.error ?? `The server answered ${res.status}.`);
+    useStudio.getState().finishSkim(chapterId, data.result as Parameters<StudioState['finishSkim']>[1]);
+  } catch (e) {
+    useStudio.getState().failSkim(chapterId, e instanceof Error ? e.message : 'Unknown error');
+  }
+}
+
+/** Reads finished paragraphs in the background, a couple at a time; skims archived chapters when nothing else waits. */
 export function useExtractor() {
   useEffect(() => {
     const tick = () => {
       const s = useStudio.getState();
-      if (s.aiStatus !== 'on' || !s.aiEnabled || s.inFlight.length >= MAX_IN_FLIGHT) return;
+      if (!s.hydrated || s.aiStatus !== 'on' || !s.aiEnabled || s.inFlight.length >= MAX_IN_FLIGHT) return;
       const idle = Date.now() - s.lastEditAt > IDLE_MS;
       const texts = new Map(s.manuscript.chapters.flatMap((c) => c.paragraphs).map((p) => [p.id, p.text]));
       const pid = s.queue.find((id) => !s.inFlight.includes(id) && (idle || id !== s.cursorPid) && s.failed[id] !== texts.get(id));
-      if (pid) void run(pid);
+      if (pid) return void run(pid);
+      const next = s.project.skimPending?.[0];
+      if (next && !s.skimming && !s.queue.length && !s.inFlight.length) void skim(next);
     };
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);

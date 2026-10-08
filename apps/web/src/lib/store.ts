@@ -4,10 +4,15 @@ import type { JSONContent } from '@tiptap/core';
 import {
   applyExtraction,
   applyMerge,
+  applySkim,
+  flatten,
+  joinManuscripts,
+  splitBook,
   describeChange,
   emptyProject,
   fold,
   reconcile,
+  label,
   SAMPLE,
   SAMPLE_TITLE,
   type ArtStyle,
@@ -15,10 +20,12 @@ import {
   type Look,
   type Manuscript,
   type Project,
+  type Skim,
 } from '@questwright/engine';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { BLANK_DOC, docToManuscript, manuscriptToDoc } from './doc';
+import { idbPersist } from './idb-storage';
 import { newId } from './ids';
 import { ACHIEVEMENTS } from './achievements';
 import { snapshot, unlockToasts, type Snapshot, type Toast } from './unlocks';
@@ -54,6 +61,9 @@ export interface StudioState extends Persisted {
   docVersion: number;
   /** Panels that just unlocked, for a brief highlight. */
   flash: string[];
+  /** The saved book has been loaded from this browser. */
+  hydrated: boolean;
+  skimming: string | null;
 
   setDoc(doc: JSONContent): void;
   setCursor(pid: string | null): void;
@@ -80,18 +90,46 @@ export interface StudioState extends Persisted {
   finishExtraction(pid: string, sentText: string, result: Extraction): void;
   failExtraction(pid: string, sentText: string, message: string): void;
   loadSample(): void;
+  importSeries(books: { title: string; text: string }[], keep: number, skim: boolean): SeriesSummary;
+  finishSkim(chapterId: string, result: Skim): void;
+  failSkim(chapterId: string, message: string): void;
+  startSkim(chapterId: string): void;
   newProject(): void;
   importProject(project: Project, doc: JSONContent): void;
   toast(t: Omit<Toast, 'id'>): void;
   dropToast(id: number): void;
 }
 
+export interface SeriesSummary {
+  books: number;
+  tracked: number;
+  paragraphs: number;
+  characters: number;
+  tabs: number;
+  systemChanges: number;
+  toRead: number;
+  toSkim: number;
+  unconfirmed: number;
+  windowLabel: string;
+}
+
 let toastSeq = 0;
 
+/**
+ * Combines archived books with the editor's text, brings the change log up to
+ * date, and lists what the AI still has to read: only the read window, newest
+ * book first.
+ */
 function derive(project: Project, doc: JSONContent) {
-  const manuscript = docToManuscript(doc);
+  const manuscript = project.archive ? joinManuscripts(project.archive, docToManuscript(doc)) : docToManuscript(doc);
   const r = reconcile(project, manuscript, newId);
-  return { project: r.project, manuscript, queue: r.needsExtraction.map((p) => p.id), created: r.created };
+  const flat = flatten(manuscript);
+  const start = r.project.window ? flat.find((p) => p.id === r.project.window!.startParagraphId)?.index ?? 0 : 0;
+  const queue = r.needsExtraction
+    .filter((p) => p.index >= start)
+    .sort((a, b) => (b.bookIndex ?? 0) - (a.bookIndex ?? 0) || a.index - b.index)
+    .map((p) => p.id);
+  return { project: r.project, manuscript, queue, created: r.created };
 }
 
 function sampleState(): Pick<StudioState, 'project' | 'doc' | 'manuscript' | 'queue'> {
@@ -132,6 +170,8 @@ export const useStudio = create<StudioState>()(
         accessCode: '',
         achievements: [],
         flash: [],
+        hydrated: false,
+        skimming: null,
         cursorPid: null,
         scrub: null,
         jumpTo: null,
@@ -270,6 +310,57 @@ export const useStudio = create<StudioState>()(
           set({ inFlight: s.inFlight.filter((x) => x !== pid), failed });
           get().toast({ kind: 'error', head: 'Could not read a paragraph', body: message });
         },
+        importSeries(books, keep, skim) {
+          const batch = newId();
+          const all = books.map((b, i) => splitBook(b.text, b.title, `${batch}-${i}-`));
+          const cut = Math.max(0, books.length - keep);
+          const archive = { chapters: all.slice(0, cut).flat() };
+          const window = { chapters: all.slice(cut).flat() };
+          const first = window.chapters[0]?.paragraphs[0]?.id;
+          const base = emptyProject(newId(), books.length > 1 ? `${books[0]!.title} – ${books[books.length - 1]!.title}` : books[0]?.title ?? 'Imported book');
+          if (cut > 0) {
+            base.archive = archive;
+            if (first) base.window = { startParagraphId: first };
+            if (skim) base.skimPending = archive.chapters.filter((c) => c.paragraphs.length).map((c) => c.id);
+          }
+          const doc = manuscriptToDoc(window);
+          const d = derive(base, doc);
+          const latest = fold(d.project, d.manuscript);
+          const flat = flatten(d.manuscript);
+          const startAt = first ? flat.find((p) => p.id === first) : undefined;
+          set({
+            project: d.project, doc, manuscript: d.manuscript, queue: d.queue, tab: 'roster', scrub: null, cursorPid: null,
+            seen: snapshot(latest), failed: {}, inFlight: [], docVersion: get().docVersion + 1,
+          });
+          return {
+            books: books.length,
+            tracked: books.length - cut,
+            paragraphs: flat.length,
+            characters: Object.keys(latest.sheets).length,
+            tabs: Object.values(latest.sheets).filter((s) => s.promoted).length,
+            systemChanges: d.project.records.filter((r) => r.source === 'parser').length,
+            toRead: d.queue.length,
+            toSkim: d.project.skimPending?.length ?? 0,
+            unconfirmed: Object.values(latest.sheets).reduce((n, s) => n + s.unconfirmed.length, 0),
+            windowLabel: startAt ? label(startAt) : '',
+          };
+        },
+        startSkim(chapterId) {
+          set({ skimming: chapterId });
+        },
+        finishSkim(chapterId, result) {
+          const s = get();
+          const chapter = s.project.archive?.chapters.find((c) => c.id === chapterId);
+          const pending = (s.project.skimPending ?? []).filter((id) => id !== chapterId);
+          if (!chapter?.paragraphs.length) return set({ skimming: null, project: { ...s.project, skimPending: pending } });
+          const r = applySkim(s.project, chapter, result, newId);
+          commit({ project: { ...r.project, skimPending: pending }, skimming: null });
+        },
+        failSkim(chapterId, message) {
+          const s = get();
+          set({ skimming: null, project: { ...s.project, skimPending: (s.project.skimPending ?? []).filter((id) => id !== chapterId) } });
+          get().toast({ kind: 'error', head: 'Could not skim a chapter', body: message });
+        },
         loadSample() {
           set({ ...sampleState(), tab: 'roster', scrub: null, cursorPid: null, seen: null, failed: {}, inFlight: [], docVersion: get().docVersion + 1 });
         },
@@ -292,7 +383,10 @@ export const useStudio = create<StudioState>()(
     {
       name: 'questwright:studio',
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: idbPersist<Persisted>(),
+      onRehydrateStorage: () => () => {
+        useStudio.setState((s) => ({ hydrated: true, docVersion: s.docVersion + 1 }));
+      },
       partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements }),
       merge: (persisted, current) => {
         const p = persisted as Partial<Persisted> | undefined;

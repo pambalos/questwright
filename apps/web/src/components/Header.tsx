@@ -1,14 +1,16 @@
 'use client';
 
 import { wordCount } from '@questwright/engine';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useStudio } from '@/lib/store';
+import { SeriesImport } from './SeriesImport';
 
 const WORDS_PER_LEVEL = 500;
 
 export function Header() {
   const s = useStudio();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [series, setSeries] = useState(false);
   const words = wordCount(s.manuscript);
   const level = Math.floor(words / WORDS_PER_LEVEL) + 1;
   const pct = ((words % WORDS_PER_LEVEL) / WORDS_PER_LEVEL) * 100;
@@ -65,10 +67,12 @@ export function Header() {
       <div className="menu">
         <button className="btn" onClick={() => confirmReplace('Start a new, empty book?', s.newProject)}>New book</button>
         <button className="btn" onClick={() => confirmReplace('Load the Emberfall sample?', s.loadSample)}>Sample</button>
+        <button className="btn" onClick={() => setSeries(true)}>Import series</button>
         <button className="btn" onClick={exportBook}>Export</button>
-        <button className="btn" onClick={() => fileRef.current?.click()}>Import</button>
+        <button className="btn" onClick={() => fileRef.current?.click()}>Open export</button>
         <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importBook(f); e.target.value = ''; }} />
       </div>
+      {series && <SeriesImport onClose={() => setSeries(false)} />}
     </header>
   );
 }

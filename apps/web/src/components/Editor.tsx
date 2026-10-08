@@ -17,6 +17,7 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
   const records = useStudio((s) => s.project.records);
   const inFlight = useStudio((s) => s.inFlight);
   const jumpTo = useStudio((s) => s.jumpTo);
+  const archived = useStudio((s) => new Set(s.project.archive?.chapters.map((c) => c.book)).size);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editor = useEditor(
@@ -83,7 +84,10 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
         >
           System box
         </button>
-        <span className="hint">Bracketed lines are system boxes. Shift+Enter for a new line inside one.</span>
+        <span className="hint">
+          {archived > 0 && `${archived} earlier book${archived > 1 ? 's are' : ' is'} archived read-only; their system boxes still count. `}
+          Bracketed lines are system boxes. Shift+Enter for a new line inside one.
+        </span>
       </div>
       <div className="page">
         <EditorContent editor={editor} />

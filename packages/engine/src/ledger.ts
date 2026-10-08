@@ -194,6 +194,7 @@ function lastAtOrBefore(sorted: number[], end: number): number {
 }
 
 const mentionCache = new WeakMap<Manuscript, Map<string, Map<string, number[]>>>();
+const textMatches = new Map<string, Map<string, string[]>>();
 
 /**
  * Paragraph indices where each character's name or an alias appears. One pass over
@@ -220,9 +221,17 @@ export function mentionIndex(m: Manuscript, reg: Registry): Map<string, number[]
   if (owners.size) {
     const esc = [...owners.keys()].sort((a, b) => b.length - a.length).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const re = new RegExp(`(?<![\\p{L}\\p{N}])(${esc.join('|')})(?![\\p{L}\\p{N}])`, 'giu');
+    // Paragraph texts repeat across edits of the same book, so remember what each one names.
+    let byText = textMatches.get(sig);
+    if (!byText) {
+      if (textMatches.size > 8) textMatches.clear();
+      textMatches.set(sig, (byText = new Map()));
+    }
     for (const p of flatten(m)) {
-      for (const match of p.text.matchAll(re)) {
-        for (const id of owners.get(match[1]!.toLowerCase()) ?? []) {
+      let found = byText.get(p.text);
+      if (!found) byText.set(p.text, (found = [...new Set([...p.text.matchAll(re)].map((x) => x[1]!.toLowerCase()))]));
+      for (const name of found) {
+        for (const id of owners.get(name) ?? []) {
           const list = out.get(id) ?? [];
           if (list[list.length - 1] !== p.index) list.push(p.index);
           out.set(id, list);
