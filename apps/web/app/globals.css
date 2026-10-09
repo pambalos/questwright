@@ -484,3 +484,6 @@ kbd { font: 11.5px ui-monospace, monospace; background: var(--hud-3); border: 1p
 .portrait-inset { position: absolute; left: 6px; bottom: 6px; width: 54px; height: 72px; padding: 0; border: 1px solid var(--gold); border-radius: 4px; overflow: hidden; background: #000; box-shadow: 0 4px 14px rgba(0,0,0,.5); z-index: 2; }
 .portrait-inset img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 15%; display: block; }
 .portrait-inset:hover { transform: scale(1.06); }
+.paint-inset { position: absolute; left: 8px; bottom: 8px; z-index: 2; background: linear-gradient(#2a2418, #17140d); border: 1px solid var(--gold); color: var(--gold); border-radius: 4px; padding: 4px 10px; font: 12px var(--f-display); letter-spacing: .06em; }
+.paint-inset:disabled { opacity: .55; }
+.inset-busy { position: absolute; inset: auto 0 0; background: rgba(0,0,0,.7); color: var(--gold); font-size: 9.5px; text-align: center; }

@@ -22,10 +22,24 @@ export function PortraitInset({ characterId, name }: { characterId: string; name
   const id = useStudio((s) => s.project.illustrations?.[key]?.approved);
   const openCodex = useStudio((s) => s.setCodexOpen);
   const url = useImage(id);
-  if (!url) return null;
+  const painting = useStudio((s) => s.painting.includes(key));
+  const provider = useStudio((s) => PROVIDERS[s.images.provider]);
+  const hasKey = useStudio((s) => s.imageKeys[s.images.provider]);
+  if (!url)
+    return (
+      <button
+        className="paint-inset"
+        disabled={painting || !hasKey}
+        title={hasKey ? `Paint ${name} with ${provider.label}` : `Add a ${provider.company} key in Settings to paint`}
+        onClick={() => void illustrate(key)}
+      >
+        {painting ? 'Painting…' : 'Illustrate'}
+      </button>
+    );
   return (
     <button className="portrait-inset" title={`${name}'s painting: open in the codex`} onClick={() => openCodex(key)}>
       <img src={url} alt={`Painting of ${name}`} />
+      {painting && <span className="inset-busy">Painting…</span>}
     </button>
   );
 }
