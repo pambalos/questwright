@@ -8,6 +8,7 @@ import { lookOf } from '@/figure/look';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
 import { useStudio } from '@/lib/store';
 import { LoreFacts, LoreNote } from './Compendium';
+import { Painted, PaintingPanel } from './Painting';
 
 const BOOKS: { key: LoreCategory; title: string }[] = [
   { key: 'character', title: 'Characters' },
@@ -130,7 +131,7 @@ export function Codex({ state, flat }: { state: WorldState; flat: PlacedParagrap
   const thumb = (e: CompendiumEntry) => {
     const c = e.characterId ? characters[e.characterId] : undefined;
     const s = e.characterId ? state.sheets[e.characterId] : undefined;
-    return c ? <Figure2D crop look={lookOf(c, protagonistId)} features={s ? gearFor(s) : []} style={style} label="" /> : <Emblem category={e.category} size={38} />;
+    return <Painted entryKey={e.key} fallback={c ? <Figure2D crop look={lookOf(c, protagonistId)} features={s ? gearFor(s) : []} style={style} label="" /> : <Emblem category={e.category} size={38} />} />;
   };
   const paragraphs = page ? page.text.split(/\n\s*\n/) : entry ? draft(entry) : [];
 
@@ -170,15 +171,20 @@ export function Codex({ state, flat }: { state: WorldState; flat: PlacedParagrap
         <section className="cx-portrait" aria-label="Portrait">
           {entry && (
             <>
-              <div className="cx-figure">
-                {character && sheet?.promoted ? (
-                  <CharacterModel character={character} look={lookOf(character, protagonistId)} features={gearFor(sheet)} style={style} render={render} highlight={null} label={`${character.name}`} />
-                ) : character ? (
-                  <Figure2D look={lookOf(character, protagonistId)} features={sheet ? gearFor(sheet) : []} style={style} label={character.name} />
-                ) : (
-                  <div className="cx-emblem"><Emblem category={entry.category} size={220} /></div>
-                )}
-              </div>
+              <PaintingPanel
+                key={entry.key}
+                entry={entry}
+                state={state}
+                figure={
+                  character && sheet?.promoted ? (
+                    <CharacterModel character={character} look={lookOf(character, protagonistId)} features={gearFor(sheet)} style={style} render={render} highlight={null} label={`${character.name}`} />
+                  ) : character ? (
+                    <Figure2D look={lookOf(character, protagonistId)} features={sheet ? gearFor(sheet) : []} style={style} label={character.name} />
+                  ) : (
+                    <div className="cx-emblem"><Emblem category={entry.category} size={220} /></div>
+                  )
+                }
+              />
               {entry.relations.length > 0 && (
                 <div className="cx-links">
                   <h3>Connections</h3>

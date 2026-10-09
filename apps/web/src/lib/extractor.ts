@@ -2,6 +2,7 @@
 
 import { describeChange, flatten, fold, memoryFor, summarizeSheet } from '@questwright/engine';
 import { useEffect } from 'react';
+import type { ImageProvider } from './image-providers';
 import { useStudio, type AiBackend, type StudioState } from './store';
 
 const MAX_IN_FLIGHT = 2;
@@ -204,12 +205,14 @@ export function useExtractor() {
 export function useAiStatus() {
   const code = useStudio((s) => s.accessCode);
   const setAiStatus = useStudio((s) => s.setAiStatus);
+  const setImageKeys = useStudio((s) => s.setImageKeys);
   useEffect(() => {
     let live = true;
     fetch('/api/status', { headers: { 'x-qw-access': code } })
-      .then((r) => r.json() as Promise<{ ai: boolean; locked: boolean; backend: AiBackend['kind'] | null; plan: string | null; cliSignedOut?: boolean }>)
+      .then((r) => r.json() as Promise<{ ai: boolean; locked: boolean; backend: AiBackend['kind'] | null; plan: string | null; cliSignedOut?: boolean; images?: Record<ImageProvider, boolean> }>)
       .then((d) => {
         if (!live) return;
+        if (d.images) setImageKeys(d.images);
         const backend = d.backend ? { kind: d.backend, plan: d.plan, signedOut: d.cliSignedOut } : null;
         setAiStatus(!d.ai ? 'off' : d.locked ? 'locked' : 'on', backend);
       })
@@ -217,5 +220,5 @@ export function useAiStatus() {
     return () => {
       live = false;
     };
-  }, [code, setAiStatus]);
+  }, [code, setAiStatus, setImageKeys]);
 }

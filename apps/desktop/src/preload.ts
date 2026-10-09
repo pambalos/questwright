@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('questwrightDesktop', {
   hasApiKey: (): Promise<boolean> => ipcRenderer.invoke('qw:hasKey'),
   setApiKey: (key: string | null): Promise<boolean> => ipcRenderer.invoke('qw:setKey', key),
+  setImageKey: (service: string, key: string | null): Promise<boolean> => ipcRenderer.invoke('qw:setImageKey', service, key),
   info: (): Promise<{ version: string; platform: string; keyEncrypted: boolean }> => ipcRenderer.invoke('qw:info'),
   openStudio: (characterJson: string, launch: boolean): Promise<string | null> => ipcRenderer.invoke('qw:openStudio', characterJson, launch),
 });

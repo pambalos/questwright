@@ -8,6 +8,7 @@ export * from './extraction';
 export * from './sample';
 export * from './slots';
 export * from './memory';
+export * from './art';
 
 import type { Project } from './types';
 

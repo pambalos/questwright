@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- paintings are local blob: URLs, which next/image cannot optimise */
 
 import type { ArtStyle, RenderStyle } from '@questwright/engine';
 import { useState } from 'react';
@@ -6,8 +7,12 @@ import { Figure2D } from '@/figure/Figure2D';
 import { defaultLook, lookOf, STYLE_LABEL } from '@/figure/look';
 import { desktop } from '@/lib/desktop';
 import { requestsFor } from '@/lib/extractor';
-import { useStudio, type PanelMode } from '@/lib/store';
+import { PROVIDER_IDS, PROVIDERS, type ImageProvider } from '@/lib/image-providers';
+import { useImage } from '@/lib/illustrator';
+import { thisMonth, useStudio, type PanelMode } from '@/lib/store';
 import { ApiKeyDialog } from './ApiKeyDialog';
+
+const NONE: string[] = [];
 
 const RENDERS: { key: RenderStyle; label: string; blurb: string }[] = [
   { key: 'anime', label: 'Anime', blurb: 'Animated 3D figures with cel shading, glow and idle motion.' },
@@ -26,6 +31,85 @@ const SHORTCUTS: [string, string][] = [
   ['Esc', 'Leave full-screen panel'],
   ['Shift+Enter', 'New line inside a system box'],
 ];
+
+const money = (usd: number) => `$${usd < 0.1 && usd > 0 ? usd.toFixed(3).replace(/(\.\d\d)0$/, '$1') : usd.toFixed(2)}`;
+
+function StyleRef({ id }: { id: string }) {
+  const url = useImage(id);
+  const toggle = useStudio((s) => s.toggleStyleRef);
+  return (
+    <figure className="style-ref">
+      {url ? <img src={url} alt="House style example" /> : <span className="ph" />}
+      <button className="mini" onClick={() => toggle(id)}>Remove</button>
+    </figure>
+  );
+}
+
+/** Which image service paints the codex, how well, and whether it paints on its own. */
+function Illustrations() {
+  const images = useStudio((s) => s.images);
+  const keys = useStudio((s) => s.imageKeys);
+  const spend = useStudio((s) => s.imageSpend);
+  const styleRefs = useStudio((s) => s.project.styleRefs) ?? NONE;
+  const count = useStudio((s) => Object.values(s.project.illustrations ?? {}).reduce((n, x) => n + x.versions.length, 0));
+  const setImages = useStudio((s) => s.setImageSettings);
+  const [keyFor, setKeyFor] = useState<ImageProvider | null>(null);
+  const spent = spend.month === thisMonth() ? spend.usd : 0;
+  const info = PROVIDERS[images.provider];
+
+  return (
+    <section>
+      <h3>Illustrations</h3>
+      <p className="note">Painted pictures for the codex and character cards. Claude writes each picture&apos;s brief from what the book remembers; the service below paints it.</p>
+      <div className="provider-cards" role="radiogroup" aria-label="Image service">
+        {PROVIDER_IDS.map((id) => {
+          const p = PROVIDERS[id];
+          return (
+            <div key={id} className={`provider-card${images.provider === id ? ' sel' : ''}`}>
+              <button role="radio" aria-checked={images.provider === id} className="provider-pick" onClick={() => setImages({ provider: id })}>
+                <b>{p.label}</b>
+                <span className="sub">{p.company}</span>
+                <small>{p.blurb}</small>
+                <span className="price">{money(p.cost.final)} a painting · draft {money(p.cost.draft)}</span>
+              </button>
+              <div className="provider-key">
+                <span className={`key-state${keys[id] ? ' on' : ''}`}>{keys[id] ? 'Key added' : 'No key'}</span>
+                {desktop() ? (
+                  <button className="mini" onClick={() => setKeyFor(id)}>{keys[id] ? 'Change' : 'Add key'}</button>
+                ) : (
+                  !keys[id] && <span className="sub">Set {p.env} on the server</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <h4>Quality</h4>
+      <div className="chips">
+        <button className={`chip${images.quality === 'final' ? ' sel' : ''}`} aria-pressed={images.quality === 'final'} onClick={() => setImages({ quality: 'final' })}>Full quality · {money(info.cost.final)}</button>
+        <button className={`chip${images.quality === 'draft' ? ' sel' : ''}`} aria-pressed={images.quality === 'draft'} onClick={() => setImages({ quality: 'draft' })}>Draft · {money(info.cost.draft)}</button>
+      </div>
+      <label className="check">
+        <input type="checkbox" checked={images.auto} onChange={(e) => setImages({ auto: e.target.checked })} />
+        Paint automatically when an entry gains a description, or its look or gear changes
+      </label>
+      <label className="cap">
+        Stop automatic painting for the month at $
+        <input type="number" min={0} max={1000} step={1} value={images.monthlyCap} onChange={(e) => setImages({ monthlyCap: Math.max(0, Number(e.target.value) || 0) })} aria-label="Monthly limit in US dollars" />
+      </label>
+      <p className="note">
+        This month: about {money(spent)} on paintings ({count} {count === 1 ? 'painting' : 'paintings'} in this book). Estimates; your {info.company} bill is the real figure.
+      </p>
+      <h4>House style</h4>
+      {styleRefs.length ? (
+        <div className="style-refs">{styleRefs.map((id) => <StyleRef key={id} id={id} />)}</div>
+      ) : (
+        <p className="note">None yet. Mark up to three paintings you like as house style in the codex, and every new painting will match them.</p>
+      )}
+      {keyFor && <ApiKeyDialog service={keyFor} hasKey={keys[keyFor]} onClose={() => setKeyFor(null)} />}
+    </section>
+  );
+}
 
 /** Settings for the open book (how its characters are drawn) and for the app (AI reading, panel layout). */
 export function Settings({ onClose }: { onClose(): void }) {
@@ -96,6 +180,8 @@ export function Settings({ onClose }: { onClose(): void }) {
             ))}
           </div>
         </section>
+
+        <Illustrations />
 
         <section>
           <h3>AI reading</h3>

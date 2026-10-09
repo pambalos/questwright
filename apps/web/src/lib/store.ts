@@ -17,6 +17,7 @@ import {
   SAMPLE_TITLE,
   type ArtStyle,
   type Extraction,
+  type Illustration,
   type Look,
   type Manuscript,
   type Project,
@@ -27,6 +28,7 @@ import {
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { BLANK_DOC, docToManuscript, manuscriptToDoc } from './doc';
+import type { ImageProvider, ImageQuality } from './image-providers';
 import { idbDelete, idbGet, idbPersist, idbSet } from './idb-storage';
 import { newId } from './ids';
 import { ACHIEVEMENTS } from './achievements';
@@ -59,6 +61,8 @@ interface SavedBook {
 }
 
 const bookKey = (id: string) => `questwright:book:${id}`;
+/** Where a painting's image is kept: images are too large to live in the book's save. */
+export const imageKey = (id: string) => `questwright:img:${id}`;
 const metaOf = (p: Project): BookMeta => ({ id: p.id, title: p.title, updatedAt: Date.now() });
 
 interface Persisted {
@@ -75,7 +79,22 @@ interface Persisted {
   /** Width of the character panel beside the editor, in pixels. */
   panelWidth: number;
   panelMode: PanelMode;
+  /** Painted illustrations: which service paints, at what quality, and whether new looks are painted on their own. */
+  images: ImageSettings;
+  /** What paintings have cost this calendar month, in US dollars (estimated). */
+  imageSpend: { month: string; usd: number };
 }
+
+export interface ImageSettings {
+  provider: ImageProvider;
+  quality: ImageQuality;
+  /** Paint entries on their own when they gain a description or their look changes. */
+  auto: boolean;
+  /** Automatic painting stops for the month at this spend, in US dollars. */
+  monthlyCap: number;
+}
+
+export const thisMonth = () => new Date().toISOString().slice(0, 7);
 
 export interface StudioState extends Persisted {
   manuscript: Manuscript;
@@ -90,6 +109,10 @@ export interface StudioState extends Persisted {
   aiBackend: AiBackend | null;
   /** The codex screen: null when closed, otherwise the entry key to open on ('' for none). */
   codexOpen: string | null;
+  /** Which image services the server has a key for. */
+  imageKeys: Record<ImageProvider, boolean>;
+  /** Entry keys being painted now. */
+  painting: string[];
   inFlight: string[];
   failed: Record<string, string>;
   toasts: Toast[];
@@ -125,6 +148,15 @@ export interface StudioState extends Persisted {
   /** A written codex entry for a compendium entry, and how many memories it was written from. */
   setCodex(key: string, text: string, from: number): void;
   setCodexOpen(key: string | null): void;
+  setImageSettings(patch: Partial<ImageSettings>): void;
+  setImageKeys(keys: Record<ImageProvider, boolean>): void;
+  setPainting(keys: string[]): void;
+  /** A new painting of an entry; the first one, or one asked for with `approve`, becomes the approved version. */
+  addIllustration(key: string, ill: Illustration, approve?: boolean): void;
+  approveIllustration(key: string, id: string): void;
+  deleteIllustration(key: string, id: string): void;
+  /** Adds an illustration to the house style references every new painting matches, or takes it off. */
+  toggleStyleRef(id: string): void;
   /** The author's own notes on a compendium entry (or a character's story). */
   setLoreNote(key: string, text: string): void;
   /** Author's word on which magic system a skill belongs to (null: none), for every character who has it. */
@@ -252,6 +284,10 @@ export const useStudio = create<StudioState>()(
         achievements: [],
         panelWidth: 420,
         panelMode: 'open',
+        images: { provider: 'gemini', quality: 'final', auto: false, monthlyCap: 10 },
+        imageSpend: { month: thisMonth(), usd: 0 },
+        imageKeys: { gemini: false, openai: false, flux: false },
+        painting: [],
         flash: [],
         hydrated: false,
         skimming: null,
@@ -375,6 +411,49 @@ export const useStudio = create<StudioState>()(
         },
         setCodexOpen(codexOpen) {
           set({ codexOpen });
+        },
+        setImageSettings(patch) {
+          set({ images: { ...get().images, ...patch } });
+        },
+        setImageKeys(imageKeys) {
+          set({ imageKeys });
+        },
+        setPainting(painting) {
+          set({ painting });
+        },
+        addIllustration(key, ill, approve) {
+          const s = get();
+          const project = structuredClone(s.project);
+          const prev = project.illustrations?.[key];
+          const next = { versions: [...(prev?.versions ?? []), ill], approved: approve || !prev?.approved ? ill.id : prev.approved };
+          project.illustrations = { ...project.illustrations, [key]: next };
+          const month = thisMonth();
+          const usd = (s.imageSpend.month === month ? s.imageSpend.usd : 0) + ill.cost;
+          set({ project, imageSpend: { month, usd } });
+        },
+        approveIllustration(key, id) {
+          const project = structuredClone(get().project);
+          const set_ = project.illustrations?.[key];
+          if (!set_?.versions.some((v) => v.id === id)) return;
+          set_.approved = id;
+          set({ project });
+        },
+        deleteIllustration(key, id) {
+          const project = structuredClone(get().project);
+          const set_ = project.illustrations?.[key];
+          if (!set_) return;
+          set_.versions = set_.versions.filter((v) => v.id !== id);
+          if (set_.approved === id) set_.approved = set_.versions.at(-1)?.id;
+          if (!set_.versions.length) delete project.illustrations![key];
+          project.styleRefs = project.styleRefs?.filter((r) => r !== id);
+          set({ project });
+          void idbDelete(imageKey(id)).catch(() => undefined);
+        },
+        toggleStyleRef(id) {
+          const project = structuredClone(get().project);
+          const refs = project.styleRefs ?? [];
+          project.styleRefs = refs.includes(id) ? refs.filter((r) => r !== id) : [...refs, id].slice(-3);
+          set({ project });
         },
         setCodex(key, text, from) {
           const project = structuredClone(get().project);
@@ -542,6 +621,8 @@ export const useStudio = create<StudioState>()(
             if (get().project.id === id) return;
           }
           set({ books: get().books.filter((b) => b.id !== id) });
+          const saved = await idbGet<SavedBook>(bookKey(id)).catch(() => undefined);
+          for (const ill of Object.values(saved?.project.illustrations ?? {}).flatMap((x) => x.versions)) void idbDelete(imageKey(ill.id)).catch(() => undefined);
           await idbDelete(bookKey(id)).catch(() => undefined);
         },
         toast(t) {
@@ -559,7 +640,7 @@ export const useStudio = create<StudioState>()(
       onRehydrateStorage: () => () => {
         useStudio.setState((s) => ({ hydrated: true, docVersion: s.docVersion + 1 }));
       },
-      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements, panelWidth: s.panelWidth, panelMode: s.panelMode }),
+      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements, panelWidth: s.panelWidth, panelMode: s.panelMode, images: s.images, imageSpend: s.imageSpend }),
       merge: (persisted, current) => {
         const p = persisted as Partial<Persisted> | undefined;
         if (!p?.project || !p.doc) return current;
@@ -567,7 +648,7 @@ export const useStudio = create<StudioState>()(
         // Saves from before the library hold one book: it becomes the first tab.
         const books = (p.books ?? []).map((b) => (b.id === d.project.id ? { ...b, title: d.project.title } : b));
         if (!books.some((b) => b.id === d.project.id)) books.unshift(metaOf(d.project));
-        return { ...current, ...p, books, project: d.project, manuscript: d.manuscript, queue: d.queue };
+        return { ...current, ...p, images: { ...current.images, ...p.images }, books, project: d.project, manuscript: d.manuscript, queue: d.queue };
       },
     },
   ),

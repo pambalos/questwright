@@ -1,3 +1,5 @@
+import type { IllustrationSet } from './art';
+
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export interface Paragraph {
@@ -130,6 +132,10 @@ export interface Project {
   loreNotes?: Record<string, string>;
   /** Codex entries written from memory (by the AI or the author), by entry key, with how many memories they were written from. */
   codex?: Record<string, { text: string; from: number }>;
+  /** Painted illustrations, by entry key: every version, and the one the author approved. */
+  illustrations?: Record<string, IllustrationSet>;
+  /** Images (illustration ids) every new painting should match in style. */
+  styleRefs?: string[];
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';

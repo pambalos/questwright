@@ -4,6 +4,7 @@ import { FREE_POINTS, label, slotFor, type Rarity, type ArtStyle, type Continuit
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { studioCharacter } from '@/figure/studio';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
+import { PortraitInset } from './Painting';
 import { frameFromProse, modelFor } from '@/figure/vrm/models';
 import { desktop } from '@/lib/desktop';
 import { LoreFacts, LoreNote } from './Compendium';
@@ -124,6 +125,7 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
           <div className="scol">{left.map(tile)}</div>
           <div className="fig3d">
             <CharacterModel character={character} suggestedModel={suggested} look={look} features={features} style={style} render={render} highlight={hover} label={`${name}, wearing what the story has given them`} />
+            <PortraitInset characterId={sheet.characterId} name={name} />
           </div>
           <div className="scol">{right.map(tile)}</div>
         </div>

@@ -3,6 +3,7 @@
 import { flatten, fold } from '@questwright/engine';
 import { useEffect, useMemo, useRef } from 'react';
 import { useAiStatus, useExtractor } from '@/lib/extractor';
+import { useAutoIllustrate } from '@/lib/illustrator';
 import { useStudio } from '@/lib/store';
 import { BookTabs } from './BookTabs';
 import { Codex } from './Codex';
@@ -14,6 +15,7 @@ import { PanelDivider } from './PanelDivider';
 export function Studio() {
   useAiStatus();
   useExtractor();
+  useAutoIllustrate();
   const project = useStudio((s) => s.project);
   const manuscript = useStudio((s) => s.manuscript);
   const cursorPid = useStudio((s) => s.cursorPid);

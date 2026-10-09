@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cliAuth } from '@/lib/claude-cli';
+import { imageProviders } from '@/lib/images';
 import { accessAllowed, accessCodeRequired, aiBackend, MODEL } from '@/lib/server-config';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,7 @@ export async function GET(req: Request) {
     plan: auth?.plan ?? null,
     cliSignedOut: backend === 'claude-cli' && !auth?.loggedIn,
     model: MODEL,
+    images: imageProviders(),
     locked: accessCodeRequired() && !accessAllowed(req),
   });
 }

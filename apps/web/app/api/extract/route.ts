@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import {
+  ART_SYSTEM,
+  ArtSchema,
   BATCH_EXTRACTION_SYSTEM,
   CODEX_SYSTEM,
   CodexSchema,
@@ -72,6 +74,8 @@ const BatchBody = z.object({
 
 /** Writing a codex entry: the notes are the entry's memory, laid out by codexPrompt. */
 const CodexBody = z.object({ mode: z.literal('codex'), notes: z.string().min(1).max(30000) });
+/** Art direction: the entry's memory and framing, laid out by artPrompt; the answer is an image prompt. */
+const ArtBody = z.object({ mode: z.literal('art'), notes: z.string().min(1).max(30000) });
 
 const fail = (status: number, error: string) => NextResponse.json({ error }, { status });
 
@@ -124,6 +128,12 @@ export async function POST(req: Request) {
   const codex = CodexBody.safeParse(json);
   if (codex.success) {
     const r = await ask({ system: CODEX_SYSTEM, prompt: codex.data.notes, schema: CodexSchema, what: 'passage' });
+    return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
+  }
+
+  const art = ArtBody.safeParse(json);
+  if (art.success) {
+    const r = await ask({ system: ART_SYSTEM, prompt: art.data.notes, schema: ArtSchema, what: 'passage' });
     return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
   }
 

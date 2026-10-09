@@ -2,6 +2,7 @@
 
 import { label, type PlacedParagraph, type WorldState } from '@questwright/engine';
 import { Figure2D } from '@/figure/Figure2D';
+import { Painted } from './Painting';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
 import { useStudio } from '@/lib/store';
@@ -30,7 +31,10 @@ export function Roster({ view, flat }: { view: WorldState; flat: PlacedParagraph
           return (
             <div className="rc" key={c.id}>
               <div className="rc-fig">
-                <Figure2D look={lookOf(c, protagonistId)} features={gearFor(s)} style={style} silhouette={!s.promoted && !c.drawn} label={s.promoted || c.drawn ? `${c.name}` : `${c.name}, not drawn yet`} />
+                <Painted
+                  entryKey={`char:${c.id}`}
+                  fallback={<Figure2D look={lookOf(c, protagonistId)} features={gearFor(s)} style={style} silhouette={!s.promoted && !c.drawn} label={s.promoted || c.drawn ? `${c.name}` : `${c.name}, not drawn yet`} />}
+                />
               </div>
               <b>{c.name}</b>
               <small>{c.role ? `${c.role} · ` : ''}first seen {s.firstSeen !== undefined ? label(flat[s.firstSeen]!) : '—'}</small>

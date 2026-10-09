@@ -41,7 +41,13 @@ function log(...args: unknown[]) {
 interface Settings {
   /** The API key, encrypted with the operating system's keychain when available. */
   apiKey?: { encrypted: boolean; value: string };
+  /** Keys for the image services that paint illustrations, stored the same way. */
+  imageKeys?: Partial<Record<ImageService, { encrypted: boolean; value: string }>>;
 }
+
+const IMAGE_ENV = { gemini: 'GEMINI_API_KEY', openai: 'OPENAI_API_KEY', flux: 'BFL_API_KEY' } as const;
+type ImageService = keyof typeof IMAGE_ENV;
+const isImageService = (p: unknown): p is ImageService => typeof p === 'string' && p in IMAGE_ENV;
 
 function readSettings(): Settings {
   try {
@@ -56,8 +62,10 @@ function writeSettings(s: Settings) {
   writeFileSync(settingsPath(), JSON.stringify(s, null, 2), { mode: 0o600 });
 }
 
-function apiKey(): string | undefined {
-  const k = readSettings().apiKey;
+const seal = (key: string) =>
+  safeStorage.isEncryptionAvailable() ? { encrypted: true, value: safeStorage.encryptString(key).toString('base64') } : { encrypted: false, value: key };
+
+function unseal(k: { encrypted: boolean; value: string } | undefined): string | undefined {
   if (!k) return undefined;
   try {
     return k.encrypted ? safeStorage.decryptString(Buffer.from(k.value, 'base64')) : k.value;
@@ -66,11 +74,32 @@ function apiKey(): string | undefined {
   }
 }
 
+const apiKey = () => unseal(readSettings().apiKey);
+
 function storeKey(key: string | null) {
   const s = readSettings();
   if (!key) delete s.apiKey;
-  else if (safeStorage.isEncryptionAvailable()) s.apiKey = { encrypted: true, value: safeStorage.encryptString(key).toString('base64') };
-  else s.apiKey = { encrypted: false, value: key };
+  else s.apiKey = seal(key);
+  writeSettings(s);
+}
+
+/** The image service keys, as the environment variables the server reads them from. */
+function imageEnv(): Record<string, string> {
+  const keys = readSettings().imageKeys ?? {};
+  const env: Record<string, string> = {};
+  for (const [service, name] of Object.entries(IMAGE_ENV)) {
+    const key = unseal(keys[service as ImageService]);
+    if (key) env[name] = key;
+  }
+  return env;
+}
+
+function storeImageKey(service: ImageService, key: string | null) {
+  const s = readSettings();
+  const keys = { ...s.imageKeys };
+  if (!key) delete keys[service];
+  else keys[service] = seal(key);
+  s.imageKeys = keys;
   writeSettings(s);
 }
 
@@ -149,6 +178,7 @@ async function startServer() {
       NEXT_TELEMETRY_DISABLED: '1',
       ...(key ? { ANTHROPIC_API_KEY: key } : {}),
       ...(claude ? { QW_CLAUDE_CLI: claude } : {}),
+      ...imageEnv(),
     },
   });
   server = child;
@@ -238,6 +268,13 @@ ipcMain.handle('qw:hasKey', () => Boolean(apiKey()));
 ipcMain.handle('qw:setKey', async (_e, key: unknown) => {
   if (key !== null && (typeof key !== 'string' || !/^\S{20,300}$/.test(key))) throw new Error('That does not look like an API key.');
   storeKey(key as string | null);
+  await startServer();
+  return true;
+});
+ipcMain.handle('qw:setImageKey', async (_e, service: unknown, key: unknown) => {
+  if (!isImageService(service)) throw new Error('That is not an image service.');
+  if (key !== null && (typeof key !== 'string' || !/^\S{10,400}$/.test(key))) throw new Error('That does not look like an API key.');
+  storeImageKey(service, key as string | null);
   await startServer();
   return true;
 });
