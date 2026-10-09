@@ -55,6 +55,7 @@ async function failure(res: Response, who: string): Promise<ImageError> {
   const detail = typeof body?.error === 'string' ? body.error : body?.error?.message ?? body?.message ?? (typeof body?.detail === 'string' ? body.detail : '');
   if (res.status === 401 || res.status === 403) return new ImageError(503, `${who} rejected the key${detail ? `: ${detail}` : '.'}`);
   if (res.status === 429) return new ImageError(429, `${who} is rate limiting or out of credit${detail ? `: ${detail}` : '.'}`);
+  if (res.status === 402) return new ImageError(402, `${who} needs billing set up on the account the key belongs to${detail ? `: ${detail}` : '.'}`);
   if (res.status === 400) return new ImageError(422, `${who} declined the request${detail ? `: ${detail}` : '.'}`);
   return new ImageError(502, `${who} failed (${res.status})${detail ? `: ${detail}` : '.'}`);
 }
@@ -83,7 +84,7 @@ async function gemini(key: string, model: string, job: PaintJob, refs: Reference
     body: JSON.stringify({
       model,
       input: [{ type: 'text', text: job.prompt }, ...refs.map((r) => ({ type: 'image', mime_type: r.mime, data: r.data }))],
-      response_format: { type: 'image', mime_type: 'image/png', aspect_ratio: job.aspect, image_size: job.quality === 'final' ? '2K' : '1K' },
+      response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: job.aspect, image_size: job.quality === 'final' ? '2K' : '1K' },
     }),
     signal: AbortSignal.timeout(180_000),
   });
