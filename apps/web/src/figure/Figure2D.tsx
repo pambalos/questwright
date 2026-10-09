@@ -284,7 +284,7 @@ export function Figure2D({ look, features, style, crop, silhouette, highlight, l
   );
 
   return (
-    <svg viewBox={crop ? (hood ? '74 40 52 52' : '79 46 42 42') : '0 0 200 340'} role="img" aria-label={label}>
+    <svg className="fig2d" viewBox={crop ? (hood ? '74 40 52 52' : '79 46 42 42') : '0 0 200 340'} role="img" aria-label={label}>
       <defs>
         <radialGradient id={`${u}bg`} cx=".5" cy=".45" r=".75">
           <stop offset="0" stopColor={t(look.cloth, 0.55)} />

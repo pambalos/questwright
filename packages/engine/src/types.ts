@@ -118,7 +118,7 @@ export interface Project {
   archive?: Manuscript;
   /** Chapters of archived books still waiting for a character skim. */
   skimPending?: string[];
-  art?: { style: ArtStyle };
+  art?: { style: ArtStyle; render?: RenderStyle };
   /** Author's word on which magic system a skill belongs to, and what it builds on. Wins over the AI's reading. */
   skillPaths?: Record<string, { system: string | null; requires?: string }>;
   /** The author's own notes on compendium entries, by entry key. */
@@ -126,6 +126,8 @@ export interface Project {
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';
+/** How characters are drawn: animated anime-style 3D, or still pen-and-ink illustrations like a printed book. */
+export type RenderStyle = 'anime' | 'storybook';
 
 
 export type PanelKey = 'stats' | 'equipment' | 'inventory' | 'skills' | 'currencies' | 'blessings' | 'titles';

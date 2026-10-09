@@ -34,6 +34,7 @@ interface Props {
 export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: Props) {
   const character = useStudio((s) => s.project.characters[sheet.characterId]);
   const style: ArtStyle = useStudio((s) => s.project.art?.style ?? 'painterly');
+  const render = useStudio((s) => s.project.art?.render ?? 'anime');
   const togglePin = useStudio((s) => s.togglePin);
   const toggleLock = useStudio((s) => s.toggleAppearanceLock);
   const setLook = useStudio((s) => s.setLook);
@@ -122,7 +123,7 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
         <div className="doll-grid">
           <div className="scol">{left.map(tile)}</div>
           <div className="fig3d">
-            <CharacterModel character={character} suggestedModel={suggested} look={look} features={features} style={style} highlight={hover} label={`${name}, wearing what the story has given them`} />
+            <CharacterModel character={character} suggestedModel={suggested} look={look} features={features} style={style} render={render} highlight={hover} label={`${name}, wearing what the story has given them`} />
           </div>
           <div className="scol">{right.map(tile)}</div>
         </div>

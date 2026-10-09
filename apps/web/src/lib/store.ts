@@ -21,6 +21,7 @@ import {
   type Manuscript,
   type Project,
   type Rarity,
+  type RenderStyle,
   type Skim,
 } from '@questwright/engine';
 import { create } from 'zustand';
@@ -114,6 +115,7 @@ export interface StudioState extends Persisted {
   toggleAppearanceLock(characterId: string): void;
   drawCharacter(characterId: string): void;
   setArtStyle(style: ArtStyle): void;
+  setRenderStyle(render: RenderStyle): void;
   setPanelWidth(px: number): void;
   setPanelMode(mode: PanelMode): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
@@ -344,8 +346,13 @@ export const useStudio = create<StudioState>()(
         setPanelMode(panelMode) {
           set({ panelMode });
         },
+        setRenderStyle(render) {
+          const s = get();
+          set({ project: { ...s.project, art: { style: s.project.art?.style ?? 'painterly', render } } });
+        },
         setArtStyle(style) {
-          set({ project: { ...get().project, art: { style } } });
+          const p = get().project;
+          set({ project: { ...p, art: { ...p.art, style } } });
         },
         setValue(pid, characterId, kind, name, value) {
           const project = structuredClone(get().project);

@@ -21,6 +21,7 @@ export function Studio() {
   const panelWidth = useStudio((s) => s.panelWidth);
   const panelMode = useStudio((s) => s.panelMode);
   const setPanelMode = useStudio((s) => s.setPanelMode);
+  const render = useStudio((s) => s.project.art?.render ?? 'anime');
   const layout = useRef<HTMLDivElement>(null);
 
   const flat = useMemo(() => flatten(manuscript), [manuscript]);
@@ -46,7 +47,15 @@ export function Studio() {
   if (!hydrated) return <p style={{ padding: 24 }}>Opening your book…</p>;
 
   return (
-    <div className="app">
+    <div className={`app render-${render}`}>
+      {/* The storybook look for 2D figures: a hand's wobble and sepia ink. */}
+      <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
+        <filter id="qw-sketch" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="1" seed="7" result="grain" />
+          <feDisplacementMap in="SourceGraphic" in2="grain" scale="1.8" xChannelSelector="R" yChannelSelector="G" result="drawn" />
+          <feColorMatrix in="drawn" type="matrix" values="0.40 0.50 0.12 0 0.04  0.35 0.45 0.10 0 0.03  0.26 0.34 0.08 0 0.02  0 0 0 1 0" />
+        </filter>
+      </svg>
       <Header />
       <BookTabs />
       <div ref={layout} className={`main panel-${panelMode}`} style={{ '--panel-w': `${panelWidth}px` } as React.CSSProperties}>

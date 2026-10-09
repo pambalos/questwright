@@ -1,14 +1,16 @@
 import type { VRM } from '@pixiv/three-vrm';
-import type { ArtStyle, Look } from '@questwright/engine';
+import type { ArtStyle, Look, RenderStyle } from '@questwright/engine';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { Feature } from '../gear';
 import { tone } from '../look';
 import { highlight, rigGear, type Rigged } from './gear3d';
+import { InkShader } from './ink';
 import { builtIn, CUSTOM } from './models';
 import { loadVrm } from './loader';
 
@@ -22,6 +24,8 @@ export interface StageCharacter {
   look: Look;
   features: Feature[];
   style: ArtStyle;
+  /** Anime (animated, the default) or storybook (a still pen-and-ink plate). */
+  render?: RenderStyle;
 }
 
 /** Sets the model's hair and clothing colours from the character's look. */
@@ -125,6 +129,10 @@ export class CharacterStage {
   private renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
+  private ink: ShaderPass;
+  private render: RenderStyle = 'anime';
+  private ring: THREE.Mesh;
+  private night: THREE.Texture;
   private scene = new THREE.Scene();
   private cam = new THREE.PerspectiveCamera(28, 1, 0.05, 60);
   private holder = new THREE.Group();
@@ -168,11 +176,15 @@ export class CharacterStage {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.4, 1.0);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    this.ink = new ShaderPass(InkShader);
+    this.ink.enabled = false;
+    this.composer.addPass(this.ink);
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.6;
-    this.scene.background = backdrop();
+    this.night = backdrop();
+    this.scene.background = this.night;
     this.scene.fog = new THREE.Fog(0x0b0d16, 5, 12);
 
     this.scene.add(new THREE.HemisphereLight(0xc9d4ff, 0x2a1c10, 0.7));
@@ -196,10 +208,10 @@ export class CharacterStage {
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
-    const ring = new THREE.Mesh(
+    const ring = (this.ring = new THREE.Mesh(
       new THREE.PlaneGeometry(1.9, 1.9),
       new THREE.MeshBasicMaterial({ map: runeRing(), transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffd38a }),
-    );
+    ));
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.003;
     this.scene.add(ring);
@@ -241,8 +253,22 @@ export class CharacterStage {
     highlight(this.rig, key);
   }
 
+  /** Anime: lit, glowing and moving. Storybook: a still ink drawing on paper. */
+  private setRender(render: RenderStyle) {
+    if (render === this.render) return;
+    this.render = render;
+    const book = render === 'storybook';
+    this.ink.enabled = book;
+    this.bloom.enabled = !book;
+    this.ring.visible = !book;
+    this.dust.visible = !book;
+    this.scene.background = book ? new THREE.Color(0xf2e9d6) : this.night;
+    this.scene.fog = book ? null : new THREE.Fog(0x0b0d16, 5, 12);
+  }
+
   /** Shows a character; reloads the model only when it changes, re-rigs gear when the sheet changes. */
   async show(c: StageCharacter) {
+    this.setRender(c.render ?? 'anime');
     const key = c.model === CUSTOM ? `${CUSTOM}:${c.id}:${c.version ?? 0}` : c.model;
     if (key !== this.modelKey) {
       const seq = ++this.loadSeq;
@@ -399,6 +425,8 @@ export class CharacterStage {
       this.renderer.setSize(w, h, false);
       this.composer.setSize(w, h);
       this.bloom.setSize(w, h);
+      this.ink.uniforms.resolution!.value.set(w * pr, h * pr);
+      this.ink.uniforms.pixelRatio!.value = pr;
       this.cam.aspect = w / h;
       this.cam.updateProjectionMatrix();
     }
@@ -415,12 +443,14 @@ export class CharacterStage {
 
     const t = now / 1000;
     const vrm = this.vrm;
+    // A storybook plate holds still: one moment of the idle pose, eyes open.
+    const still = this.render === 'storybook';
     if (vrm) {
-      pose(vrm, t, this.calm);
+      pose(vrm, still ? 1.2 : t, this.calm || still);
       const em = vrm.expressionManager;
       if (em) {
         const since = t - this.blinkAt;
-        em.setValue('blink', since > 0 && since < 0.16 ? Math.sin((since / 0.16) * Math.PI) : 0);
+        em.setValue('blink', !still && since > 0 && since < 0.16 ? Math.sin((since / 0.16) * Math.PI) : 0);
         if (since > 0.16) this.blinkAt = t + 2 + Math.random() * 3.5;
         em.setValue('relaxed', 0.25);
       }
