@@ -56,8 +56,28 @@ async function run(pid: string) {
 }
 
 /** Subscription reading: up to this much consecutive prose goes in one request. */
-const BATCH_PARAGRAPHS = 40;
-const BATCH_CHARS = 24000;
+export const BATCH_PARAGRAPHS = 40;
+export const BATCH_CHARS = 24000;
+
+/** How many requests reading these paragraphs takes: one each with an API key, batched by chapter with a subscription. */
+export function requestsFor(plan: { chapter: number; chars: number }[], batched: boolean): number {
+  if (!batched) return plan.length;
+  let n = 0;
+  let count = 0;
+  let chars = 0;
+  let chapter = -1;
+  for (const p of plan) {
+    if (p.chapter !== chapter || count >= BATCH_PARAGRAPHS || chars + p.chars > BATCH_CHARS) {
+      n++;
+      count = 0;
+      chars = 0;
+      chapter = p.chapter;
+    }
+    count++;
+    chars += p.chars;
+  }
+  return n;
+}
 
 /** Queued paragraphs from the first one onwards, within one chapter and in manuscript order, up to the batch limits. */
 function pickBatch(s: StudioState, ready: (pid: string) => boolean): string[] {

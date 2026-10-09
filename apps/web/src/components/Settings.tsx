@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Figure2D } from '@/figure/Figure2D';
 import { defaultLook, lookOf, STYLE_LABEL } from '@/figure/look';
 import { desktop } from '@/lib/desktop';
+import { requestsFor } from '@/lib/extractor';
 import { useStudio, type PanelMode } from '@/lib/store';
 import { ApiKeyDialog } from './ApiKeyDialog';
 
@@ -43,6 +44,15 @@ export function Settings({ onClose }: { onClose(): void }) {
   const setPanelMode = useStudio((s) => s.setPanelMode);
   const setPanelWidth = useStudio((s) => s.setPanelWidth);
   const [keyOpen, setKeyOpen] = useState(false);
+  const rereadPlan = useStudio((s) => s.rereadPlan);
+  const rereadBook = useStudio((s) => s.rereadBook);
+  const reading = useStudio((s) => s.queue.length + s.inFlight.length);
+  const [reread, setReread] = useState<{ paragraphs: number; words: number; requests: number } | null>(null);
+  const planReread = () => {
+    const plan = rereadPlan();
+    const chars = plan.reduce((n, p) => n + p.chars, 0);
+    setReread({ paragraphs: plan.length, words: Math.round(chars / 5.5), requests: requestsFor(plan, aiBackend?.kind === 'claude-cli') });
+  };
 
   // Preview with the book's protagonist when there is one.
   const hero = (protagonistId && characters[protagonistId]) || Object.values(characters).find((c) => !c.mergedInto);
@@ -93,7 +103,23 @@ export function Settings({ onClose }: { onClose(): void }) {
           <div className="row-btns">
             {aiStatus === 'on' && <button onClick={() => setAiEnabled(!aiEnabled)}>{aiEnabled ? 'Pause reading' : 'Resume reading'}</button>}
             {desktop() && <button onClick={() => setKeyOpen(true)}>{aiBackend?.kind === 'api' ? 'Change API key' : 'Add an API key'}</button>}
+            {aiStatus === 'on' && !reread && <button onClick={planReread}>Re-read this book…</button>}
           </div>
+          {reading > 0 && !reread && <p className="note">{reading} {reading === 1 ? 'paragraph' : 'paragraphs'} waiting to be read.</p>}
+          {reread && (
+            <div className="reread" role="alertdialog" aria-label="Re-read this book">
+              <p>
+                Read all {reread.paragraphs.toLocaleString()} paragraphs of “{title}” again (about {reread.words.toLocaleString()} words) to fill in the compendium, the AI&apos;s
+                memory, magic systems and relations from the start. That is about <b>{reread.requests.toLocaleString()} {reread.requests === 1 ? 'request' : 'requests'}</b>
+                {aiBackend?.kind === 'claude-cli' ? ' on your Claude subscription, which shares its usage limits with Claude Code.' : ' to the Anthropic API, billed to your key.'}
+              </p>
+              <p className="note">Finds you already claimed or dismissed are not proposed again, and facts are not repeated. You can pause reading any time from the header.</p>
+              <div className="row-btns">
+                <button className="go" onClick={() => { rereadBook(); setReread(null); }}>Re-read {reread.paragraphs.toLocaleString()} paragraphs</button>
+                <button onClick={() => setReread(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section>

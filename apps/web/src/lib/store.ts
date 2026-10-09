@@ -148,6 +148,10 @@ export interface StudioState extends Persisted {
   startSkim(chapterId: string): void;
   /** Opens a new, empty book in its own tab. */
   newProject(): void;
+  /** What re-reading the open book would cover: the paragraphs that would be read, in reading order. */
+  rereadPlan(): { pid: string; chapter: number; chars: number }[];
+  /** Queues every prose paragraph of the open book for AI reading again. */
+  rereadBook(): void;
   /** Opens an exported book in its own tab. */
   importProject(project: Project, doc: JSONContent): void;
   switchBook(id: string): Promise<void>;
@@ -499,6 +503,19 @@ export const useStudio = create<StudioState>()(
         loadSample() {
           const { project, doc } = sampleState();
           openBook(fresh(project, doc));
+        },
+        rereadPlan() {
+          const s = get();
+          const d = derive({ ...s.project, extracted: {} }, s.doc);
+          const byId = new Map(flatten(d.manuscript).map((p) => [p.id, p]));
+          return d.queue.map((pid) => ({ pid, chapter: byId.get(pid)?.chapterIndex ?? 0, chars: byId.get(pid)?.text.length ?? 0 }));
+        },
+        rereadBook() {
+          const s = get();
+          // Forget which paragraphs were read; claimed and dismissed finds stay, so nothing is proposed twice.
+          const d = derive({ ...s.project, extracted: {} }, s.doc);
+          set({ project: d.project, manuscript: d.manuscript, queue: d.queue, failed: {} });
+          get().toast({ kind: 'unlock', head: 'Re-reading the book', body: `${d.queue.length} paragraphs queued. Pause any time from the header.` });
         },
         newProject() {
           openBook(fresh(emptyProject(newId(), 'Untitled book'), BLANK_DOC));

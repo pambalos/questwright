@@ -438,3 +438,6 @@ kbd { font: 11.5px ui-monospace, monospace; background: var(--hud-3); border: 1p
   .cx-list { max-height: 40vh; }
   .cx-figure .v3d { min-height: 320px; }
 }
+.reread { border: 1px solid var(--gold); border-radius: 8px; padding: 10px 12px; background: var(--gold-soft); display: flex; flex-direction: column; gap: 8px; }
+.reread p { margin: 0; font-size: 13px; line-height: 1.5; }
+.reread .go { background: var(--gold); color: #1a1405; border-color: var(--gold); }
