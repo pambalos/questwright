@@ -11,10 +11,12 @@ const CATEGORIES: { key: LoreCategory | 'all'; label: string }[] = [
   { key: 'place', label: 'Places' },
   { key: 'faction', label: 'Factions' },
   { key: 'item', label: 'Items' },
+  { key: 'spell', label: 'Spells' },
+  { key: 'magic', label: 'Magic' },
   { key: 'other', label: 'Lore' },
 ];
 
-const BADGE: Record<LoreCategory, string> = { character: 'Character', creature: 'Creature', place: 'Place', faction: 'Faction', item: 'Item', other: 'Lore' };
+const BADGE: Record<LoreCategory, string> = { character: 'Character', creature: 'Creature', place: 'Place', faction: 'Faction', item: 'Item', spell: 'Spell', magic: 'Magic system', other: 'Lore' };
 
 /** What the story has said about one subject, oldest first, each linked to its paragraph; the author can strike out a wrong one. */
 export function LoreFacts({ facts, flat, onJump, limit }: { facts: CompendiumEntry['facts']; flat: PlacedParagraph[]; onJump(pid: string): void; limit?: number }) {
@@ -57,6 +59,7 @@ export function LoreNote({ entryKey }: { entryKey: string }) {
 export function Compendium({ state, flat, onJump }: { state: WorldState; flat: PlacedParagraph[]; onJump(pid: string): void }) {
   const characters = useStudio((s) => s.project.characters);
   const setTab = useStudio((s) => s.setTab);
+  const openCodex = useStudio((s) => s.setCodexOpen);
   const [category, setCategory] = useState<LoreCategory | 'all'>('all');
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<string | null>(null);
@@ -80,6 +83,7 @@ export function Compendium({ state, flat, onJump }: { state: WorldState; flat: P
   return (
     <>
       <p className="note">Everyone and everything the story has introduced so far. Entries and facts are added as the AI reads; strike out anything wrong, and add your own notes.</p>
+      {state.compendium.length > 0 && <button className="codex-open" onClick={() => openCodex('')}>Open the codex</button>}
       <div className="lore-tools">
         <input className="lore-search" type="search" placeholder="Search the compendium" aria-label="Search the compendium" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="chips" role="group" aria-label="Show">
@@ -117,7 +121,10 @@ export function Compendium({ state, flat, onJump }: { state: WorldState; flat: P
                   )}
                   <LoreFacts facts={e.facts} flat={flat} onJump={onJump} />
                   <LoreNote entryKey={e.key} />
-                  {sheet?.promoted && <button className="mini" onClick={() => setTab(e.characterId!)}>Open {e.name}&apos;s sheet</button>}
+                  <div className="row-btns">
+                    <button className="mini" onClick={() => openCodex(e.key)}>Open in codex</button>
+                    {sheet?.promoted && <button className="mini" onClick={() => setTab(e.characterId!)}>Open {e.name}&apos;s sheet</button>}
+                  </div>
                 </div>
               )}
             </article>

@@ -1,6 +1,6 @@
 'use client';
 
-import { describeChange, flatten, fold, summarizeSheet } from '@questwright/engine';
+import { describeChange, flatten, fold, memoryFor, summarizeSheet } from '@questwright/engine';
 import { useEffect } from 'react';
 import { useStudio, type AiBackend, type StudioState } from './store';
 
@@ -24,12 +24,13 @@ function requestFor(s: StudioState, pid: string) {
         .map((c) => ({ name: c.name, aliases: c.aliases })),
       world: before.world,
       compendium: before.compendium.map((e) => e.name).slice(0, 400),
+      memory: memoryFor(before, [flat[p.index - 1]?.text ?? '', p.text]),
       sheets: Object.values(before.sheets)
         .filter((sh) => sh.promoted)
         .map((sh) => summarizeSheet(name(sh.characterId), sh)),
       parsed: s.project.records
         .filter((r) => r.paragraphId === pid && r.source === 'parser')
-        .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
+        .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' || r.change.kind === 'relation' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
     },
   };
 }
@@ -102,7 +103,7 @@ async function runBatch(pids: string[]) {
             text: p.text,
             parsed: s.project.records
               .filter((r) => covered.has(r.paragraphId) && r.source === 'parser')
-              .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
+              .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' || r.change.kind === 'relation' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
           };
         }),
         previous: flat[first.index - 1]?.text,
@@ -111,6 +112,8 @@ async function runBatch(pids: string[]) {
           .map((c) => ({ name: c.name, aliases: c.aliases })),
         world: before.world,
         compendium: before.compendium.map((e) => e.name).slice(0, 400),
+        // What the book has said so far about everyone and everything this passage names.
+        memory: memoryFor(before, [flat[first.index - 1]?.text ?? '', ...items.map((p) => p.text)], 24),
         sheets: Object.values(before.sheets)
           .filter((sh) => sh.promoted)
           .map((sh) => summarizeSheet(name(sh.characterId), sh)),

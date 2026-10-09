@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import {
   BATCH_EXTRACTION_SYSTEM,
+  CODEX_SYSTEM,
+  CodexSchema,
   BatchExtractionSchema,
   batchExtractionPrompt,
   EXTRACTION_SYSTEM,
@@ -53,6 +55,7 @@ const Body = z.object({
   world: World,
   sheets: z.array(z.string().max(4000)).max(200),
   compendium: z.array(short).max(1000).optional(),
+  memory: z.array(z.string().max(1200)).max(30).optional(),
   parsed: Parsed,
 });
 
@@ -64,7 +67,11 @@ const BatchBody = z.object({
   world: World,
   sheets: z.array(z.string().max(4000)).max(200),
   compendium: z.array(short).max(1000).optional(),
+  memory: z.array(z.string().max(1200)).max(30).optional(),
 });
+
+/** Writing a codex entry: the notes are the entry's memory, laid out by codexPrompt. */
+const CodexBody = z.object({ mode: z.literal('codex'), notes: z.string().min(1).max(30000) });
 
 const fail = (status: number, error: string) => NextResponse.json({ error }, { status });
 
@@ -111,6 +118,12 @@ export async function POST(req: Request) {
   const skim = SkimBody.safeParse(json);
   if (skim.success) {
     const r = await ask({ system: SKIM_SYSTEM, prompt: skimPrompt(skim.data.chapter, skim.data.characters), schema: SkimSchema, what: 'chapter' });
+    return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
+  }
+
+  const codex = CodexBody.safeParse(json);
+  if (codex.success) {
+    const r = await ask({ system: CODEX_SYSTEM, prompt: codex.data.notes, schema: CodexSchema, what: 'passage' });
     return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
   }
 

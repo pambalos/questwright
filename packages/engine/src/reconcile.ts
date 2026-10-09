@@ -58,7 +58,7 @@ export function reconcile(input: Project, manuscript: Manuscript, newId: () => s
     created.push(...res.created);
     res.changes.forEach((change, i) => {
       kept.push({ id: newId(), paragraphId: p.id, textHash: hash.get(p.id)!, source: 'parser', status: 'applied', change, quote: parsed[i]!.quote });
-      if (!project.protagonistId && change.kind !== 'merge' && MECHANIC.has(change.kind)) project.protagonistId = change.character;
+      if (!project.protagonistId && change.kind !== 'merge' && change.kind !== 'relation' && MECHANIC.has(change.kind)) project.protagonistId = change.character;
     });
   }
   for (const id of Object.keys(project.parsed)) if (!byId.has(id)) delete project.parsed[id];

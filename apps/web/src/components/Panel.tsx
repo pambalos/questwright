@@ -143,7 +143,7 @@ function LootTray({ flat }: { flat: PlacedParagraph[] }) {
       </div>
       {pending.map((r) => {
         const c = r.change;
-        const who = c.kind === 'merge' ? 'Roster' : c.kind === 'lore' ? 'Compendium' : name(c.character);
+        const who = c.kind === 'merge' ? 'Roster' : c.kind === 'lore' || c.kind === 'relation' ? 'Compendium' : name(c.character);
         const rarity = 'rarity' in c ? c.rarity : undefined;
         const p = order.get(r.paragraphId)!;
         return (

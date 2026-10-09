@@ -88,6 +88,8 @@ export interface StudioState extends Persisted {
   lastEditAt: number;
   aiStatus: AiStatus;
   aiBackend: AiBackend | null;
+  /** The codex screen: null when closed, otherwise the entry key to open on ('' for none). */
+  codexOpen: string | null;
   inFlight: string[];
   failed: Record<string, string>;
   toasts: Toast[];
@@ -120,6 +122,9 @@ export interface StudioState extends Persisted {
   setPanelMode(mode: PanelMode): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
   setValue(pid: string, characterId: string, kind: 'currency' | 'item', name: string, value: number): void;
+  /** A written codex entry for a compendium entry, and how many memories it was written from. */
+  setCodex(key: string, text: string, from: number): void;
+  setCodexOpen(key: string | null): void;
   /** The author's own notes on a compendium entry (or a character's story). */
   setLoreNote(key: string, text: string): void;
   /** Author's word on which magic system a skill belongs to (null: none), for every character who has it. */
@@ -252,6 +257,7 @@ export const useStudio = create<StudioState>()(
         lastEditAt: 0,
         aiStatus: 'checking',
         aiBackend: null,
+        codexOpen: null,
         inFlight: [],
         failed: {},
         toasts: [],
@@ -266,7 +272,7 @@ export const useStudio = create<StudioState>()(
           const sys = d.project.records
             .filter((r) => r.source === 'parser' && !before.has(r.id) && r.change.kind !== 'mention')
             .filter((r) => !s.project.records.some((o) => o.source === 'parser' && o.paragraphId === r.paragraphId && JSON.stringify(o.change) === JSON.stringify(r.change)))
-            .map((r) => ({ kind: 'sys' as const, head: 'System', body: `${r.change.kind === 'merge' || r.change.kind === 'lore' ? '' : `${name(r.change.character)} · `}${describeChange(r.change, name)}` }));
+            .map((r) => ({ kind: 'sys' as const, head: 'System', body: `${r.change.kind === 'merge' || r.change.kind === 'lore' || r.change.kind === 'relation' ? '' : `${name(r.change.character)} · `}${describeChange(r.change, name)}` }));
           commit({ doc, project: d.project, manuscript: d.manuscript, queue: d.queue, lastEditAt: Date.now() }, sys.slice(0, 4));
         },
         setCursor(pid) {
@@ -362,6 +368,14 @@ export const useStudio = create<StudioState>()(
               : ({ kind: 'item', character: characterId, item: name, delta: 0, set: value } as const);
           project.records.push({ id: newId(), paragraphId: pid, textHash: '', source: 'author', status: 'applied', change });
           commit({ project });
+        },
+        setCodexOpen(codexOpen) {
+          set({ codexOpen });
+        },
+        setCodex(key, text, from) {
+          const project = structuredClone(get().project);
+          project.codex = { ...project.codex, [key]: { text, from } };
+          set({ project });
         },
         setLoreNote(key, text) {
           const project = structuredClone(get().project);

@@ -7,6 +7,7 @@ export * from './reconcile';
 export * from './extraction';
 export * from './sample';
 export * from './slots';
+export * from './memory';
 
 import type { Project } from './types';
 

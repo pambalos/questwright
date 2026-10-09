@@ -69,7 +69,9 @@ export type Change =
   /** The character takes up a magic system, discipline or path. */
   | { kind: 'magic'; character: string; system: string }
   /** A fact for the compendium: who someone is, where they come from, what a creature or place is. `character` is set when the subject is a character. */
-  | { kind: 'lore'; character?: string; subject: string; category: LoreCategory; fact: string }
+  | { kind: 'lore'; character?: string; subject: string; category: LoreCategory; fact: string; lore?: LoreKind; speaker?: string }
+  /** A lasting link between two entities: "Lyra" "is the sister of" "Kael". Ids are set where an end is a character. */
+  | { kind: 'relation'; subject: string; object: string; relation: string; subjectId?: string; objectId?: string }
   | { kind: 'item'; character: string; item: string; delta: number; set?: number; rarity?: Rarity }
   | { kind: 'equip'; character: string; slot: string; item: string; rarity?: Rarity }
   | { kind: 'unequip'; character: string; slot: string }
@@ -79,7 +81,10 @@ export type Change =
 
 export type ChangeKind = Change['kind'];
 
-export const LORE_CATEGORIES = ['character', 'creature', 'place', 'faction', 'item', 'other'] as const;
+export const LORE_CATEGORIES = ['character', 'creature', 'place', 'faction', 'item', 'spell', 'magic', 'other'] as const;
+/** A fact (backstory, what something is), a trait (a short descriptor), or something said (a quote, with its speaker). */
+export const LORE_KINDS = ['fact', 'trait', 'said'] as const;
+export type LoreKind = (typeof LORE_KINDS)[number];
 export type LoreCategory = (typeof LORE_CATEGORIES)[number];
 
 /** Where a change came from. Parser changes apply on their own; AI changes wait for the author. */
@@ -123,6 +128,8 @@ export interface Project {
   skillPaths?: Record<string, { system: string | null; requires?: string }>;
   /** The author's own notes on compendium entries, by entry key. */
   loreNotes?: Record<string, string>;
+  /** Codex entries written from memory (by the AI or the author), by entry key, with how many memories they were written from. */
+  codex?: Record<string, { text: string; from: number }>;
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';
@@ -199,4 +206,11 @@ export interface CompendiumEntry {
   /** Paragraph where it first appears. */
   firstAt: string;
   facts: { fact: string; at: string; recordId: string }[];
+  /** Short descriptors: looks, manner, temperament. */
+  traits: { text: string; at: string; recordId: string }[];
+  /** Things said about or by this entity. */
+  said: { text: string; speaker?: string; at: string; recordId: string }[];
+  /** Links to other entries, in both directions. */
+  relations: { key: string; name: string; relation: string; direction: 'out' | 'in'; at: string; recordId: string }[];
+  aliases: string[];
 }

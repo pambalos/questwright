@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useAiStatus, useExtractor } from '@/lib/extractor';
 import { useStudio } from '@/lib/store';
 import { BookTabs } from './BookTabs';
+import { Codex } from './Codex';
 import { Editor } from './Editor';
 import { Header } from './Header';
 import { Panel } from './Panel';
@@ -22,6 +23,7 @@ export function Studio() {
   const panelMode = useStudio((s) => s.panelMode);
   const setPanelMode = useStudio((s) => s.setPanelMode);
   const render = useStudio((s) => s.project.art?.render ?? 'anime');
+  const codexOpen = useStudio((s) => s.codexOpen);
   const layout = useRef<HTMLDivElement>(null);
 
   const flat = useMemo(() => flatten(manuscript), [manuscript]);
@@ -63,6 +65,7 @@ export function Studio() {
         {panelMode === 'open' && <PanelDivider layout={layout} />}
         <Panel view={view} latest={latest} flat={flat} viewIndex={viewIndex} />
       </div>
+      {codexOpen !== null && <Codex state={view} flat={flat} />}
     </div>
   );
 }

@@ -289,6 +289,14 @@ ipcMain.handle('qw:openStudio', (_e, json: unknown, launch: unknown) => {
 
 ipcMain.handle('qw:info', () => ({ version: app.getVersion(), platform: process.platform, keyEncrypted: safeStorage.isEncryptionAvailable() }));
 
+// One window on the books at a time: two copies would overwrite each other's saves.
+if (!app.requestSingleInstanceLock()) app.quit();
+app.on('second-instance', () => {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
+
 app.whenReady().then(async () => {
   protocol.handle(SCHEME, (req) => {
     const u = new URL(req.url);

@@ -64,6 +64,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
     s.promoted = true;
     if (!s.magic.some((m) => m.system === system)) s.magic.push({ system, at });
     tree(world, system);
+    entry(loreKey(system), system, 'magic', at);
   };
   const learn = (system: string, skill: string, requires: string | undefined, at: string, holder: string) => {
     const t = tree(world, system);
@@ -75,7 +76,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
   const entries = new Map<string, CompendiumEntry>();
   const entry = (key: string, name: string, category: LoreCategory, at: string, characterId?: string) => {
     let e = entries.get(key);
-    if (!e) entries.set(key, (e = { key, name, category, firstAt: at, facts: [], ...(characterId ? { characterId } : {}) }));
+    if (!e) entries.set(key, (e = { key, name, category, firstAt: at, facts: [], traits: [], said: [], relations: [], aliases: [], ...(characterId ? { characterId } : {}) }));
     // A later, more specific reading of what something is wins over "other".
     if (e.category === 'other' && category !== 'other') e.category = category;
     return e;
@@ -106,14 +107,34 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
 
     if (c.kind === 'merge') continue;
     if (c.kind === 'lore') {
-      const fact = { fact: c.fact, at: p.id, recordId: r.id };
       const who = c.character ? canonical(reg, c.character) : undefined;
+      let e: CompendiumEntry;
       if (who && reg[who]) {
         seen(who, p.index);
-        sheet(who).lore.push(fact);
-        entry(`char:${who}`, reg[who]!.name, 'character', p.id, who).facts.push(fact);
+        e = entry(`char:${who}`, reg[who]!.name, 'character', p.id, who);
       } else {
-        entry(`lore:${c.subject.trim().toLowerCase()}`, c.subject.trim(), c.category, p.id).facts.push(fact);
+        e = entry(loreKey(c.subject), c.subject.trim(), c.category, p.id);
+      }
+      const at = { at: p.id, recordId: r.id };
+      if (c.lore === 'trait') e.traits.push({ text: c.fact, ...at });
+      else if (c.lore === 'said') e.said.push({ text: c.fact, ...(c.speaker ? { speaker: c.speaker } : {}), ...at });
+      else {
+        e.facts.push({ fact: c.fact, ...at });
+        if (who && reg[who]) sheet(who).lore.push({ fact: c.fact, ...at });
+      }
+      continue;
+    }
+    if (c.kind === 'relation') {
+      // Either end can be a character or anything else the story names.
+      const end = (name: string, id?: string) => {
+        const who = id ? canonical(reg, id) : undefined;
+        return who && reg[who] ? entry(`char:${who}`, reg[who]!.name, 'character', p.id, who) : entry(loreKey(name), name.trim(), 'other', p.id);
+      };
+      const a = end(c.subject, c.subjectId);
+      const b = end(c.object, c.objectId);
+      if (a !== b) {
+        a.relations.push({ key: b.key, name: b.name, relation: c.relation, direction: 'out', at: p.id, recordId: r.id });
+        b.relations.push({ key: a.key, name: a.name, relation: c.relation, direction: 'in', at: p.id, recordId: r.id });
       }
       continue;
     }
@@ -171,6 +192,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
           s.skills.push({ name: c.skill, level: c.level, at: p.id, ...(c.replaces ? { evolvedFrom: c.replaces } : {}), ...(system ? { system } : {}), ...(requires ? { requires } : {}) });
         }
         add(world.skills, c.skill);
+        entry(loreKey(c.skill), c.skill, 'spell', p.id);
         if (system) {
           takeUp(id, system, p.id);
           learn(system, c.skill, requires, p.id, id);
@@ -185,12 +207,15 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
         if (c.set !== undefined) (carried as Set<string> | null)?.delete(`${id}|item:${c.item}`);
         if (v < 0) warn(id, 'negative-item', `${name} gives up more ${c.item} than they have`);
         if (v > 0) s.items[c.item] = { count: v, rarity: c.rarity ?? s.items[c.item]?.rarity };
+        // Notable finds get a compendium entry; everyday things do not.
+        if (c.delta > 0 && c.rarity && c.rarity !== 'common') entry(loreKey(c.item), c.item, 'item', p.id);
         else delete s.items[c.item];
         unlock(id, 'inventory');
         break;
       }
       case 'equip':
         s.equipment[c.slot] = { item: c.item, rarity: c.rarity };
+        entry(loreKey(c.item), c.item, 'item', p.id);
         add(world.slots, c.slot);
         unlock(id, 'equipment');
         break;
@@ -238,6 +263,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
     if (c && first) {
       const e = entry(`char:${c.id}`, c.name, 'character', first.id, c.id);
       e.name = c.name;
+      e.aliases = [...c.aliases];
       if ((paras.get(e.firstAt)?.index ?? Infinity) > first.index) e.firstAt = first.id;
     }
   }
@@ -247,6 +273,8 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
 }
 
 /** A known magic system's own spelling of a name, so "qi cultivation" and "Qi Cultivation" are one system. */
+const loreKey = (name: string) => `lore:${name.trim().toLowerCase()}`;
+
 function systemName(world: WorldDefs, name: string): string {
   const n = name.trim();
   return world.magic.find((m) => m.name.toLowerCase() === n.toLowerCase())?.name ?? n;
