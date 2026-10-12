@@ -19,6 +19,7 @@ import {
   type ArtStyle,
   type ArtStyleKey,
   type Extraction,
+  type GameCard,
   type Illustration,
   type LearnedPattern,
   type Look,
@@ -201,6 +202,10 @@ export interface StudioState extends Persisted {
   /** A lore pass's finds for some paragraphs; returns how many new memories they added. */
   addLore(items: { pid: string; text: string; finds: Pick<Extraction, 'lore' | 'relations'> }[]): number;
   markLoreRead(key: string, hash: string): void;
+  setCard(key: string, card: GameCard | null): void;
+  /** Entry keys whose cards are being written now (or waiting). */
+  writingCards: string[];
+  setWritingCards(keys: string[]): void;
   /** Learned system message formats: saving, switching or removing one reads the book again with them. */
   savePattern(p: LearnedPattern): void;
   updatePattern(id: string, patch: Partial<LearnedPattern>): void;
@@ -357,6 +362,7 @@ export const useStudio = create<StudioState>()(
         showGear: true,
         outlineOpen: true,
         lorePass: null,
+        writingCards: [],
         images: { provider: 'gemini', quality: 'final', auto: false, monthlyCap: 10 },
         imageSpend: { month: thisMonth(), usd: 0 },
         imageKeys: { gemini: false, openai: false, flux: false },
@@ -494,6 +500,16 @@ export const useStudio = create<StudioState>()(
           }
           if (added) commit({ project });
           return added;
+        },
+        setWritingCards(writingCards) {
+          set({ writingCards });
+        },
+        setCard(key, card) {
+          const p = get().project;
+          const cards = { ...p.cards };
+          if (card) cards[key] = card;
+          else delete cards[key];
+          set({ project: { ...p, cards } });
         },
         markLoreRead(key, hash) {
           const p = get().project;

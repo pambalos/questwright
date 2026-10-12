@@ -18,6 +18,7 @@
     "@tiptap/pm": "3.31.4",
     "@tiptap/react": "3.31.4",
     "@tiptap/starter-kit": "3.31.4",
+    "html-to-image": "1.11.11",
     "mammoth": "^1.13.0",
     "next": "15.5.27",
     "react": "19.1.1",

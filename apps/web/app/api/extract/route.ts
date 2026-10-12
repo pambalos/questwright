@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import {
+  CARD_SYSTEM,
+  CardSchema,
   LORE_PASS_SYSTEM,
   LorePassSchema,
   lorePassPrompt,
@@ -86,6 +88,8 @@ const CodexBody = z.object({ mode: z.literal('codex'), notes: z.string().min(1).
 /** Art direction: the entry's memory and framing, laid out by artPrompt; the answer is an image prompt. */
 const ArtBody = z.object({ mode: z.literal('art'), notes: z.string().min(1).max(30000) });
 /** Learning a format: an example the author selected, and the paragraph around it. */
+/** A tabletop card: the entry's memory, laid out by cardPrompt. */
+const CardBody = z.object({ mode: z.literal('card'), notes: z.string().min(1).max(30000) });
 /** The lore pass: a chapter (or a stretch of one) read only for the compendium. */
 const LoreBody = z.object({
   mode: z.literal('lore'),
@@ -147,6 +151,12 @@ export async function POST(req: Request) {
   const codex = CodexBody.safeParse(json);
   if (codex.success) {
     const r = await ask({ system: CODEX_SYSTEM, prompt: codex.data.notes, schema: CodexSchema, what: 'passage' });
+    return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
+  }
+
+  const card = CardBody.safeParse(json);
+  if (card.success) {
+    const r = await ask({ system: CARD_SYSTEM, prompt: card.data.notes, schema: CardSchema, what: 'passage' });
     return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
   }
 

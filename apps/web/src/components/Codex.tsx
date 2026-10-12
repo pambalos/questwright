@@ -12,6 +12,7 @@ import { useStudio } from '@/lib/store';
 import { LoreFacts, LoreNote } from './Compendium';
 import { Painted, PaintingPanel } from './Painting';
 import { IconRow } from './SkillIcon';
+import { CardDeck, CardPanel } from './GameCard';
 
 const BOOKS: { key: LoreCategory; title: string }[] = [
   { key: 'character', title: 'Characters' },
@@ -63,6 +64,7 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
   const [artOpen, setArtOpen] = useState(false);
   // Docked, the list shows two entries, or eight expanded; it scrolls either way.
   const [listOpen, setListOpen] = useState(false);
+  const [deck, setDeck] = useState(false);
   const art = useMemo(() => new Map(artTargets(project, state).map((t) => [t.entryKey, t])), [project, state]);
   const target = useStudio((s) => s.codexOpen);
   const setOpen = useStudio((s) => s.setCodexOpen);
@@ -162,6 +164,9 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
           <div className="cx-dots" aria-hidden="true">{books.map((b) => <i key={b.key} className={b.key === book ? 'on' : ''} />)}</div>
         </nav>
         <div className="cx-tools">
+          {books[at] && ['spell', 'magic', 'item'].includes(books[at]!.key) && (
+            <button className={`cx-tool${deck ? ' on' : ''}`} aria-pressed={deck} title="See this book's entries as cards" onClick={() => setDeck(!deck)}>Cards</button>
+          )}
           <button className={`cx-tool${artOpen ? ' on' : ''}`} aria-pressed={artOpen} title="What has been painted, and paint the rest" onClick={() => setArtOpen(!artOpen)}>Art</button>
           <button className="cx-tool" title={docked ? 'Full screen' : 'Show the codex in the side panel'} onClick={() => setDock(docked ? 'full' : 'panel')}>{docked ? '⤢' : '◧'}</button>
           <button className="cx-close" aria-label="Close the codex" title="Close (Esc)" onClick={() => setOpen(null)}>✕</button>
@@ -173,6 +178,9 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
         </div>
       )}
 
+      {deck && books[at] && ['spell', 'magic', 'item'].includes(books[at]!.key) ? (
+        <CardDeck entries={entries} onOpen={(k) => { setSelected(k); setDeck(false); }} />
+      ) : (
       <div className="cx-body">
         <aside className="cx-list">
           <input className="cx-search" type="search" placeholder="Search" aria-label="Search this book" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -250,6 +258,7 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
                 )}
                 {!page && paragraphs.length > 0 && <span className="cx-muted">Drafted from the facts so far.</span>}
               </div>
+              <CardPanel key={`card-${entry.key}`} entry={entry} />
               {entry.traits.length > 0 && (
                 <div className="cx-section">
                   <h4>Traits</h4>
@@ -281,6 +290,7 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
           )}
         </article>
       </div>
+      )}
     </div>
   );
 }

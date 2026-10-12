@@ -1,5 +1,6 @@
 import type { ArtStyleKey, IllustrationSet } from './art';
 import type { LearnedPattern } from './patterns';
+import type { GameCard } from './cards';
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
@@ -142,6 +143,8 @@ export interface Project {
   patterns?: LearnedPattern[];
   /** Chapters the lore pass has read: first paragraph id → hash of the chapter's text when it was read. */
   loreRead?: Record<string, string>;
+  /** Tabletop cards for skills, spells, magic systems and items, by entry key. */
+  cards?: Record<string, GameCard>;
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';
