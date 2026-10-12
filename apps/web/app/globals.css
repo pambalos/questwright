@@ -706,3 +706,8 @@ button.pill.painter:hover { border-color: var(--gold); }
 .codex-screen.docked .pt-meta { flex-basis: 100%; }
 .codex-screen.docked .icon-row { width: 100%; box-sizing: border-box; }
 .codex-screen.docked .cx-art { max-height: 40vh; overflow-y: auto; }
+/* Docked codex: a short, scrollable list of entries until expanded */
+.codex-screen.docked .cx-items { max-height: 150px; }
+.codex-screen.docked .cx-items.open { max-height: none; }
+.cx-more { align-self: center; background: none; border: 1px solid #4a463e; color: #b8b0a0; font-size: 12px; padding: 3px 12px; border-radius: 2px; }
+.cx-more:hover { border-color: var(--gold); color: var(--gold); }

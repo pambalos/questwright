@@ -61,6 +61,8 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
   const project = useStudio((s) => s.project);
   const setDock = useStudio((s) => s.setCodexDock);
   const [artOpen, setArtOpen] = useState(false);
+  // Docked, the list shows a few entries (scrollable) until expanded.
+  const [listOpen, setListOpen] = useState(false);
   const art = useMemo(() => new Map(artTargets(project, state).map((t) => [t.entryKey, t])), [project, state]);
   const target = useStudio((s) => s.codexOpen);
   const setOpen = useStudio((s) => s.setCodexOpen);
@@ -175,7 +177,7 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
         <aside className="cx-list">
           <input className="cx-search" type="search" placeholder="Search" aria-label="Search this book" value={query} onChange={(e) => setQuery(e.target.value)} />
           {books[at] && <ArtStatus state={state} only={[ART_OF[books[at]!.key]]} compact />}
-          <div className="cx-items" role="listbox" aria-label={books[at]?.title}>
+          <div className={`cx-items${listOpen ? ' open' : ''}`} role="listbox" aria-label={books[at]?.title}>
             {entries.map((e) => (
               <button key={e.key} role="option" aria-selected={e.key === entry?.key} className={`cx-item${e.key === entry?.key ? ' on' : ''}`} onClick={() => setSelected(e.key)}>
                 <span className="cx-thumb">{thumb(e)}</span>
@@ -186,6 +188,11 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
             ))}
             {!entries.length && <p className="cx-empty">Nothing here{q ? ' matches' : ' yet'}.</p>}
           </div>
+          {docked && entries.length > 3 && (
+            <button className="cx-more" aria-expanded={listOpen} onClick={() => setListOpen(!listOpen)}>
+              {listOpen ? 'Show fewer' : `Show all ${entries.length}`}
+            </button>
+          )}
         </aside>
 
         <section className="cx-portrait" aria-label="Portrait">
