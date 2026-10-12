@@ -75,7 +75,7 @@ function Illustrations() {
               <div className="provider-key">
                 <span className={`key-state${keys[id] ? ' on' : ''}`}>{keys[id] ? 'Key added' : 'No key'}</span>
                 {desktop() ? (
-                  <button className="mini" onClick={() => setKeyFor(id)}>{keys[id] ? 'Change' : 'Add key'}</button>
+                  <button className="mini" onClick={() => setKeyFor(id)}>{keys[id] ? 'Change key' : 'Add key'}</button>
                 ) : (
                   !keys[id] && <span className="sub">Set {p.env} on the server</span>
                 )}
@@ -107,6 +107,45 @@ function Illustrations() {
         <p className="note">None yet. Mark up to three paintings you like as house style in the codex, and every new painting will match them.</p>
       )}
       {keyFor && <ApiKeyDialog service={keyFor} hasKey={keys[keyFor]} onClose={() => setKeyFor(null)} />}
+    </section>
+  );
+}
+
+/** Every key Questwright can use, in one place: add, change or remove each. */
+function ApiKeys() {
+  const imageKeys = useStudio((s) => s.imageKeys);
+  const aiBackend = useStudio((s) => s.aiBackend);
+  const [editing, setEditing] = useState<ImageProvider | 'anthropic' | null>(null);
+  const rows: { id: ImageProvider | 'anthropic'; name: string; use: string; env: string; has: boolean }[] = [
+    { id: 'anthropic', name: 'Anthropic', use: 'AI reading, codex entries and painting briefs. Optional: without it, your Claude subscription is used through Claude Code.', env: 'ANTHROPIC_API_KEY', has: aiBackend?.kind === 'api' },
+    ...PROVIDER_IDS.map((id) => ({ id, name: PROVIDERS[id].company, use: `Paints illustrations with ${PROVIDERS[id].label}.`, env: PROVIDERS[id].env, has: imageKeys[id] })),
+  ];
+  const app = Boolean(desktop());
+  return (
+    <section>
+      <h3>API keys</h3>
+      <p className="note">
+        {app
+          ? 'Keys are stored encrypted on this computer and only sent to the company they belong to. Saving or removing one restarts the app’s server for a moment.'
+          : 'Keys live on the server, as environment variables (for example in apps/web/.env.local). Restart the server after changing them.'}
+      </p>
+      <div className="key-rows">
+        {rows.map((r) => (
+          <div key={r.id} className="key-row">
+            <div className="key-what">
+              <b>{r.name}</b>
+              <small>{r.use}</small>
+            </div>
+            <span className={`key-state${r.has ? ' on' : ''}`}>{r.has ? 'Added' : 'Not set'}</span>
+            {app ? (
+              <button className="mini" onClick={() => setEditing(r.id)}>{r.has ? 'Change or remove' : 'Add'}</button>
+            ) : (
+              <code className="key-env">{r.env}</code>
+            )}
+          </div>
+        ))}
+      </div>
+      {editing && <ApiKeyDialog service={editing === 'anthropic' ? undefined : editing} hasKey={rows.find((r) => r.id === editing)!.has} onClose={() => setEditing(null)} />}
     </section>
   );
 }
@@ -207,6 +246,8 @@ export function Settings({ onClose }: { onClose(): void }) {
             </div>
           )}
         </section>
+
+        <ApiKeys />
 
         <section>
           <h3>Panel</h3>

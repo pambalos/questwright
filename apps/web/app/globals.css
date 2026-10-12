@@ -487,3 +487,10 @@ kbd { font: 11.5px ui-monospace, monospace; background: var(--hud-3); border: 1p
 .paint-inset { position: absolute; left: 8px; bottom: 8px; z-index: 2; background: linear-gradient(#2a2418, #17140d); border: 1px solid var(--gold); color: var(--gold); border-radius: 4px; padding: 4px 10px; font: 12px var(--f-display); letter-spacing: .06em; }
 .paint-inset:disabled { opacity: .55; }
 .inset-busy { position: absolute; inset: auto 0 0; background: rgba(0,0,0,.7); color: var(--gold); font-size: 9.5px; text-align: center; }
+.key-rows { display: flex; flex-direction: column; border: 1px solid var(--hud-line); border-radius: 8px; overflow: hidden; }
+.key-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 8px 12px; background: var(--hud-2); }
+.key-row + .key-row { border-top: 1px solid var(--hud-line); }
+.key-what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.key-what b { font-size: 13.5px; }
+.key-what small { font-size: 12px; color: var(--hud-dim); line-height: 1.35; }
+.key-env { font: 11.5px ui-monospace, monospace; color: var(--hud-dim); }
