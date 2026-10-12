@@ -3,6 +3,7 @@
 import type { JSONContent } from '@tiptap/core';
 import {
   applyExtraction,
+  applyLore,
   applyMerge,
   applySkim,
   flatten,
@@ -113,6 +114,15 @@ export interface PaintJob {
   auto?: boolean;
 }
 
+export interface LorePassState {
+  total: number;
+  done: number;
+  added: number;
+  chapter?: string;
+  cancelled?: boolean;
+  error?: string;
+}
+
 export interface ImageSettings {
   provider: Painter;
   /** The installed local model to paint with, when the painter is 'local'. */
@@ -179,6 +189,12 @@ export interface StudioState extends Persisted {
   setPanelMode(mode: PanelMode): void;
   setPortraits(on: boolean): void;
   setCodexDock(dock: 'full' | 'panel'): void;
+  /** The lore pass in progress, or null. */
+  lorePass: LorePassState | null;
+  setLorePass(p: LorePassState | null): void;
+  /** A lore pass's finds for some paragraphs; returns how many new memories they added. */
+  addLore(items: { pid: string; text: string; finds: Pick<Extraction, 'lore' | 'relations'> }[]): number;
+  markLoreRead(key: string, hash: string): void;
   /** Learned system message formats: saving, switching or removing one reads the book again with them. */
   savePattern(p: LearnedPattern): void;
   updatePattern(id: string, patch: Partial<LearnedPattern>): void;
@@ -332,6 +348,7 @@ export const useStudio = create<StudioState>()(
         panelMode: 'open',
         portraits: false,
         codexDock: 'full',
+        lorePass: null,
         images: { provider: 'gemini', quality: 'final', auto: false, monthlyCap: 10 },
         imageSpend: { month: thisMonth(), usd: 0 },
         imageKeys: { gemini: false, openai: false, flux: false },
@@ -455,6 +472,24 @@ export const useStudio = create<StudioState>()(
           const s = get();
           const d = derive({ ...s.project, patterns: (s.project.patterns ?? []).filter((x) => x.id !== id) }, s.doc);
           commit({ project: d.project, manuscript: d.manuscript, queue: d.queue });
+        },
+        setLorePass(lorePass) {
+          set({ lorePass });
+        },
+        addLore(items) {
+          let project = get().project;
+          let added = 0;
+          for (const it of items) {
+            const r = applyLore(project, it.pid, it.text, it.finds, newId);
+            project = r.project;
+            added += r.added;
+          }
+          if (added) commit({ project });
+          return added;
+        },
+        markLoreRead(key, hash) {
+          const p = get().project;
+          set({ project: { ...p, loreRead: { ...p.loreRead, [key]: hash } } });
         },
         setCodexDock(codexDock) {
           set({ codexDock });

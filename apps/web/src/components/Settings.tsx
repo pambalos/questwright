@@ -15,6 +15,7 @@ import { thisMonth, useStudio, type PanelMode } from '@/lib/store';
 import { ApiKeyDialog } from './ApiKeyDialog';
 import { ArtStatus } from './ArtStatus';
 import { PatternList } from './LearnPattern';
+import { LorePassControl } from './LorePassControl';
 
 const NONE: string[] = [];
 
@@ -329,6 +330,8 @@ export function Settings({ onClose }: { onClose(): void }) {
             {desktop() && <button onClick={() => setKeyOpen(true)}>{aiBackend?.kind === 'api' ? 'Change API key' : 'Add an API key'}</button>}
             {aiStatus === 'on' && !reread && <button onClick={planReread}>Re-read this book…</button>}
           </div>
+          <h4>Lore pass</h4>
+          <LorePassControl />
           {reading > 0 && !reread && <p className="note">{reading} {reading === 1 ? 'paragraph' : 'paragraphs'} waiting to be read.</p>}
           {reread && (
             <div className="reread" role="alertdialog" aria-label="Re-read this book">

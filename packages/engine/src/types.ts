@@ -140,6 +140,8 @@ export interface Project {
   styleRefs?: string[];
   /** System message formats the author taught the parser. */
   patterns?: LearnedPattern[];
+  /** Chapters the lore pass has read: first paragraph id → hash of the chapter's text when it was read. */
+  loreRead?: Record<string, string>;
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';

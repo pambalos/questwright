@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import {
+  LORE_PASS_SYSTEM,
+  LorePassSchema,
+  lorePassPrompt,
   applyPattern,
   compilePattern,
   PATTERN_SYSTEM,
@@ -25,7 +28,7 @@ import {
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v4';
 import { CliError, runClaude } from '@/lib/claude-cli';
-import { accessAllowed, aiBackend, EFFORT, MODEL } from '@/lib/server-config';
+import { accessAllowed, aiBackend, EFFORT, MODEL, type Effort } from '@/lib/server-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,12 +86,20 @@ const CodexBody = z.object({ mode: z.literal('codex'), notes: z.string().min(1).
 /** Art direction: the entry's memory and framing, laid out by artPrompt; the answer is an image prompt. */
 const ArtBody = z.object({ mode: z.literal('art'), notes: z.string().min(1).max(30000) });
 /** Learning a format: an example the author selected, and the paragraph around it. */
+/** The lore pass: a chapter (or a stretch of one) read only for the compendium. */
+const LoreBody = z.object({
+  mode: z.literal('lore'),
+  chapter: short,
+  paragraphs: z.array(z.string().min(1).max(12000)).min(1).max(400),
+  compendium: z.array(short).max(2000),
+  memory: z.array(z.string().max(1200)).max(40),
+});
 const PatternBody = z.object({ mode: z.literal('pattern'), example: z.string().min(3).max(4000), context: z.string().max(12000).optional() });
 
 const fail = (status: number, error: string) => NextResponse.json({ error }, { status });
 
 /** One structured request, on whichever backend this server has. `what` names the text in error messages. */
-async function ask<T>(job: { system: string; prompt: string; schema: z.ZodType<T>; what: 'paragraph' | 'passage' | 'chapter' }): Promise<{ result: T } | Response> {
+async function ask<T>(job: { system: string; prompt: string; schema: z.ZodType<T>; what: 'paragraph' | 'passage' | 'chapter'; effort?: Effort }): Promise<{ result: T } | Response> {
   if (aiBackend() === 'claude-cli') {
     try {
       return { result: await runClaude(job) };
@@ -105,7 +116,7 @@ async function ask<T>(job: { system: string; prompt: string; schema: z.ZodType<T
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       system: job.system,
-      output_config: { effort: EFFORT, format: betaZodOutputFormat(job.schema) },
+      output_config: { effort: job.effort ?? EFFORT, format: betaZodOutputFormat(job.schema) },
       messages: [{ role: 'user', content: job.prompt }],
     });
     if (response.stop_reason === 'refusal') return fail(422, `The model declined to ${verb} this ${job.what}.`);
@@ -136,6 +147,14 @@ export async function POST(req: Request) {
   const codex = CodexBody.safeParse(json);
   if (codex.success) {
     const r = await ask({ system: CODEX_SYSTEM, prompt: codex.data.notes, schema: CodexSchema, what: 'passage' });
+    return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
+  }
+
+  const lore = LoreBody.safeParse(json);
+  if (lore.success) {
+    if (lore.data.paragraphs.reduce((n, p) => n + p.length, 0) > 60000) return fail(400, 'That stretch is too long for one request.');
+    // Read with more care than paragraph reading: the point of this pass is to miss less.
+    const r = await ask({ system: LORE_PASS_SYSTEM, prompt: lorePassPrompt(lore.data), schema: LorePassSchema, what: 'chapter', effort: 'medium' });
     return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
   }
 

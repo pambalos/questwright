@@ -10,6 +10,7 @@ export * from './slots';
 export * from './memory';
 export * from './art';
 export * from './patterns';
+export * from './lorepass';
 
 import type { Project } from './types';
 

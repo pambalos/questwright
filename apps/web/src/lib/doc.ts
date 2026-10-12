@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import type { Manuscript } from '@questwright/engine';
+import { isBookMarker, isChapterMarker, type Manuscript } from '@questwright/engine';
 
 export const newPid = () => `p${Math.random().toString(36).slice(2, 10)}`;
 
@@ -9,26 +9,45 @@ export function blockText(node: JSONContent): string {
 }
 
 /**
- * A level-1 heading starts a book, a level-2 heading starts a chapter; every
- * paragraph with an id is a tracked paragraph.
+ * Headings start chapters; a level-1 heading starts a book only when it reads
+ * like one ("Book 2") or the document also has level-2 chapter headings under
+ * it. "Chapter 9 - Marcus" is a chapter at any level, and a paragraph that is
+ * only a chapter marker (pasted text) starts a chapter too. Empty headings are
+ * ignored. Every paragraph with an id is a tracked paragraph.
  */
 export function docToManuscript(doc: JSONContent): Manuscript {
   const chapters: Manuscript['chapters'] = [];
   let book: string | undefined;
+  const headings: { level: number; text: string }[] = [];
+  const collect = (nodes: JSONContent[]) => {
+    for (const n of nodes) {
+      if (n.type === 'heading') headings.push({ level: Number(n.attrs?.level ?? 2), text: blockText(n).trim() });
+      else if (n.content && n.type !== 'paragraph') collect(n.content);
+    }
+  };
+  collect(doc.content ?? []);
+  // Level-1 headings are books only when the chapters sit under them as level 2.
+  const nested = headings.some((h) => h.level >= 2 && h.text && isChapterMarker(h.text)) || headings.some((h) => h.level === 1 && isBookMarker(h.text));
+  const isBook = (level: number, text: string) => level === 1 && (isBookMarker(text) || (nested && !isChapterMarker(text)));
+  const start = (title: string) => chapters.push({ id: `ch${chapters.length + 1}`, title, ...(book !== undefined ? { book } : {}), paragraphs: [] });
   const current = () => {
     const last = chapters[chapters.length - 1];
     if (last && last.book === book) return last;
-    chapters.push({ id: `ch${chapters.length + 1}`, title: 'Untitled chapter', ...(book !== undefined ? { book } : {}), paragraphs: [] });
+    start('Untitled chapter');
     return chapters[chapters.length - 1]!;
   };
   const walk = (nodes: JSONContent[]) => {
     for (const n of nodes) {
-      if (n.type === 'heading' && n.attrs?.level === 1) book = blockText(n) || 'Untitled book';
-      else if (n.type === 'heading')
-        chapters.push({ id: `ch${chapters.length + 1}`, title: blockText(n) || 'Untitled chapter', ...(book !== undefined ? { book } : {}), paragraphs: [] });
-      else if (n.type === 'paragraph') {
+      if (n.type === 'heading') {
+        const text = blockText(n).trim();
+        if (!text) continue;
+        if (isBook(Number(n.attrs?.level ?? 2), text)) book = text;
+        else start(text);
+      } else if (n.type === 'paragraph') {
         const pid = n.attrs?.pid as string | undefined;
-        if (pid) current().paragraphs.push({ id: pid, text: blockText(n) });
+        const text = blockText(n);
+        if (isChapterMarker(text) && !text.includes('[')) start(text.trim());
+        else if (pid) current().paragraphs.push({ id: pid, text });
       } else if (n.content) walk(n.content);
     }
   };

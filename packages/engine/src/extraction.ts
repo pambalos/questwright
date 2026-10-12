@@ -122,7 +122,7 @@ const compendiumLine = (names?: string[]) => (names?.length ? `Compendium entrie
 const memoryBlock = (lines?: string[]) =>
   lines?.length ? `What you remember from earlier in the book about who and what is named here:\n${lines.map((l) => `- ${l}`).join('\n')}` : '';
 
-export const EXTRACTION_SYSTEM = `You keep the character sheets for a LitRPG novel while the author writes it. You read one paragraph at a time and report what happens to the characters' game state in that paragraph.
+export const EXTRACTION_SYSTEM = `You keep the character sheets and the compendium for a LitRPG novel while the author writes it. You read one paragraph at a time and report what happens to the characters' game state in that paragraph, and what it tells the reader about its people, creatures, places, factions, items and magic.
 
 ${EXTRACTION_RULES}`;
 
@@ -135,7 +135,7 @@ export const BatchExtractionSchema = z.object({
 });
 export type BatchExtraction = z.infer<typeof BatchExtractionSchema>;
 
-export const BATCH_EXTRACTION_SYSTEM = `You keep the character sheets for a LitRPG novel while the author writes it. You read a passage of consecutive numbered paragraphs and report, paragraph by paragraph, what happens to the characters' game state.
+export const BATCH_EXTRACTION_SYSTEM = `You keep the character sheets and the compendium for a LitRPG novel while the author writes it. You read a passage of consecutive numbered paragraphs and report, paragraph by paragraph, what happens to the characters' game state and what each paragraph tells the reader about its people, creatures, places, factions, items and magic (lore and relations matter as much as game state).
 
 Return one entry per paragraph that has characters or changes, with n set to that paragraph's number; leave out paragraphs where nothing applies. Each change belongs to the paragraph that narrates it, and its quote is copied from that paragraph. Changes earlier in the passage are already true for later paragraphs. Every rule below applies to each paragraph on its own.
 
@@ -341,6 +341,54 @@ export function changeKey(c: Change): string {
   }
 }
 
+type LoreFinds = Pick<Extraction, 'lore' | 'relations'>;
+
+/** Records for what a reading says about people and things, skipping anything already known from this paragraph. */
+function loreRecords(project: Project, paragraphId: string, text: string, lore: LoreFinds['lore'], relations: LoreFinds['relations'], existing: Set<string>, newId: () => string): ChangeRecord[] {
+  const reg = project.characters;
+  const textHash = hashText(text);
+  const out: ChangeRecord[] = [];
+  for (const l of lore) {
+    const who = findByName(reg, l.subject);
+    const change: Change = {
+      kind: 'lore',
+      subject: l.subject,
+      category: who ? 'character' : l.category,
+      fact: l.fact,
+      ...(l.kind && l.kind !== 'fact' ? { lore: l.kind } : {}),
+      ...(l.kind === 'said' && l.speaker ? { speaker: l.speaker } : {}),
+      ...(who ? { character: who.id } : {}),
+    };
+    const key = changeKey(change);
+    if (existing.has(key)) continue;
+    existing.add(key);
+    out.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'applied', change, quote: text.includes(l.quote) ? l.quote : undefined });
+  }
+  for (const x of relations) {
+    const a = findByName(reg, x.subject);
+    const b = findByName(reg, x.object);
+    const change: Change = { kind: 'relation', subject: x.subject, object: x.object, relation: x.relation, ...(a ? { subjectId: a.id } : {}), ...(b ? { objectId: b.id } : {}) };
+    const key = changeKey(change);
+    if (existing.has(key)) continue;
+    existing.add(key);
+    out.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'applied', change, quote: text.includes(x.quote) ? x.quote : undefined });
+  }
+  return out;
+}
+
+/**
+ * Adds a lore reading of one paragraph (from a chapter's lore pass) to the
+ * compendium, leaving the paragraph's other records alone. Returns how many
+ * new memories it added.
+ */
+export function applyLore(input: Project, paragraphId: string, text: string, finds: LoreFinds, newId: () => string): { project: Project; added: number } {
+  const project: Project = structuredClone(input);
+  const existing = new Set(project.records.filter((r) => r.change.kind === 'lore' || r.change.kind === 'relation').map((r) => changeKey(r.change)));
+  const added = loreRecords(project, paragraphId, text, finds.lore, finds.relations, existing, newId);
+  project.records = [...project.records, ...added];
+  return { project, added: added.length };
+}
+
 /**
  * Records the model's reading of one paragraph: new characters join the
  * registry and show up as appearances right away; everything else waits as a
@@ -404,31 +452,7 @@ export function applyExtraction(
     proposals++;
   });
   // Lore goes straight into the compendium; the author strikes out anything wrong there.
-  for (const l of result.lore ?? []) {
-    const who = findByName(reg, l.subject);
-    const change: Change = {
-      kind: 'lore',
-      subject: l.subject,
-      category: who ? 'character' : l.category,
-      fact: l.fact,
-      ...(l.kind && l.kind !== 'fact' ? { lore: l.kind } : {}),
-      ...(l.kind === 'said' && l.speaker ? { speaker: l.speaker } : {}),
-      ...(who ? { character: who.id } : {}),
-    };
-    const key = changeKey(change);
-    if (existing.has(key)) continue;
-    existing.add(key);
-    records.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'applied', change, quote: text.includes(l.quote) ? l.quote : undefined });
-  }
-  for (const x of result.relations ?? []) {
-    const a = findByName(reg, x.subject);
-    const b = findByName(reg, x.object);
-    const change: Change = { kind: 'relation', subject: x.subject, object: x.object, relation: x.relation, ...(a ? { subjectId: a.id } : {}), ...(b ? { objectId: b.id } : {}) };
-    const key = changeKey(change);
-    if (existing.has(key)) continue;
-    existing.add(key);
-    records.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'applied', change, quote: text.includes(x.quote) ? x.quote : undefined });
-  }
+  records.push(...loreRecords(project, paragraphId, text, result.lore ?? [], result.relations ?? [], existing, newId));
   for (const m of merges) {
     records.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'proposed', change: m });
     proposals++;

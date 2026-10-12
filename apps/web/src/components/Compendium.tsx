@@ -3,6 +3,7 @@
 import { label, type CompendiumEntry, type LoreCategory, type PlacedParagraph, type WorldState } from '@questwright/engine';
 import { useMemo, useState } from 'react';
 import { useStudio } from '@/lib/store';
+import { LorePassControl } from './LorePassControl';
 
 const CATEGORIES: { key: LoreCategory | 'all'; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -83,7 +84,10 @@ export function Compendium({ state, flat, onJump }: { state: WorldState; flat: P
   return (
     <>
       <p className="note">Everyone and everything the story has introduced so far. Entries and facts are added as the AI reads; strike out anything wrong, and add your own notes.</p>
-      {state.compendium.length > 0 && <button className="codex-open" onClick={() => openCodex('')}>Open the codex</button>}
+      <div className="lore-head">
+        {state.compendium.length > 0 && <button className="codex-open" onClick={() => openCodex('')}>Open the codex</button>}
+        <LorePassControl compact />
+      </div>
       <div className="lore-tools">
         <input className="lore-search" type="search" placeholder="Search the compendium" aria-label="Search the compendium" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div className="chips" role="group" aria-label="Show">
