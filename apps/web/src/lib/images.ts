@@ -107,7 +107,7 @@ async function gemini(key: string, model: string, job: PaintJob, refs: Reference
   return img;
 }
 
-const OPENAI_SIZE: Record<Aspect, string> = { '2:3': '1024x1536', '3:4': '1024x1536', '1:1': '1024x1024', '4:3': '1536x1024', '3:2': '1536x1024', '16:9': '1536x1024' };
+const OPENAI_SIZE: Record<Aspect, string> = { '2:3': '1024x1536', '3:4': '1024x1536', '4:5': '1024x1536', '1:1': '1024x1024', '4:3': '1536x1024', '3:2': '1536x1024', '16:9': '1536x1024' };
 
 async function openai(key: string, model: string, job: PaintJob, refs: Reference[]) {
   const quality = job.quality === 'final' ? 'high' : 'medium';
@@ -135,7 +135,7 @@ async function openai(key: string, model: string, job: PaintJob, refs: Reference
   return { mime: `image/${body.output_format ?? 'png'}`, data };
 }
 
-const FLUX_SIZE: Record<Aspect, [number, number]> = { '2:3': [832, 1248], '3:4': [960, 1280], '1:1': [1024, 1024], '4:3': [1280, 960], '3:2': [1248, 832], '16:9': [1344, 768] };
+const FLUX_SIZE: Record<Aspect, [number, number]> = { '2:3': [832, 1248], '3:4': [960, 1280], '4:5': [1024, 1280], '1:1': [1024, 1024], '4:3': [1280, 960], '3:2': [1248, 832], '16:9': [1344, 768] };
 
 async function flux(key: string, model: string, job: PaintJob, refs: Reference[]) {
   const [width, height] = FLUX_SIZE[job.aspect];

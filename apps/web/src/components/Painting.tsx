@@ -28,11 +28,13 @@ export function SheetFigure({ characterId, name, figure }: { characterId: string
   const portraits = useStudio((s) => s.portraits);
   const setPortraits = useStudio((s) => s.setPortraits);
   const show = portraits && url;
+  const [fill, setFill] = useState(false);
   return (
     <>
       {show ? (
         <div className="sheet-portrait">
-          <img src={url} alt={`Painting of ${name}`} />
+          {/* A painting near the box's own shape fills it (trimming a sliver); a much taller one is shown whole. */}
+          <img src={url} alt={`Painting of ${name}`} className={fill ? 'fill' : ''} onLoad={(e) => setFill(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight >= 0.74)} />
         </div>
       ) : (
         figure

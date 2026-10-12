@@ -10,7 +10,7 @@ import type { CompendiumEntry, LoreCategory } from './types';
  * author approved.
  */
 
-export const ASPECTS = ['2:3', '3:4', '1:1', '4:3', '3:2', '16:9'] as const;
+export const ASPECTS = ['2:3', '3:4', '4:5', '1:1', '4:3', '3:2', '16:9'] as const;
 export type Aspect = (typeof ASPECTS)[number];
 
 export interface Illustration {
@@ -94,7 +94,7 @@ export type ArtStyleKey = keyof typeof ART_STYLES;
 export const ART_STYLE_KEYS = Object.keys(ART_STYLES) as ArtStyleKey[];
 
 const FRAMING: Record<LoreCategory, { aspect: Aspect; framing: string }> = {
-  character: { aspect: '2:3', framing: 'a three-quarter-length character portrait, the figure standing and turned slightly, face clearly visible, gear and clothing shown in detail' },
+  character: { aspect: '4:5', framing: 'a three-quarter-length character portrait (head to mid-thigh), the figure standing and turned slightly and centred in the frame with a little space around them, face clearly visible, gear and clothing shown in detail' },
   creature: { aspect: '2:3', framing: 'a full-body bestiary plate of the creature in a characteristic pose, its scale made clear, its most dangerous features prominent' },
   place: { aspect: '16:9', framing: 'a wide establishing landscape painting of the place, with a sense of scale, weather and time of day' },
   faction: { aspect: '3:4', framing: 'an emblematic scene for the faction: members in their typical dress, gathered under their colours or sigil' },
