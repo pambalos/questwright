@@ -35,6 +35,13 @@ export function SkillIcon({ name, size = 28 }: { name: string; size?: number }) 
   );
 }
 
+/** A painted icon for anything (skill, item), or `fallback` until there is one. Not clickable. */
+export function IconImage({ name, fallback }: { name: string; fallback: React.ReactNode }) {
+  const id = useStudio((s) => s.project.illustrations?.[iconKey(loreKey(name))]?.approved);
+  const url = useImage(id);
+  return url ? <img className="icon-img" src={url} alt="" /> : <>{fallback}</>;
+}
+
 /** "Paint 5 icons": every skill here that has no icon yet, one after another. */
 export function PaintIconsButton({ names }: { names: string[] }) {
   const illustrations = useStudio((s) => s.project.illustrations);
@@ -72,7 +79,7 @@ export function useSkillIcons(names: string[]): Record<string, string> {
 }
 
 /** The icon for a codex entry, with its versions: paint, repaint and pick which one is used. */
-export function IconRow({ entryKey, name }: { entryKey: string; name: string }) {
+export function IconRow({ entryKey, name, label = 'Ability icon' }: { entryKey: string; name: string; label?: string }) {
   const key = iconKey(entryKey);
   const set = useStudio((s) => s.project.illustrations?.[key]);
   const approve = useStudio((s) => s.approveIllustration);
@@ -85,7 +92,7 @@ export function IconRow({ entryKey, name }: { entryKey: string; name: string }) 
     <div className="icon-row">
       <span className="icon-big">{main ? <img src={main} alt={`${name} icon`} /> : <span>{initials(name)}</span>}</span>
       <div className="icon-side">
-        <b>Ability icon</b>
+        <b>{label}</b>
         <div className="icon-versions">
           {versions.map((v) => (
             <button key={v.id} className={v.id === set?.approved ? 'on' : ''} title={v.id === set?.approved ? 'In use' : 'Use this one'} onClick={() => approve(key, v.id)}>

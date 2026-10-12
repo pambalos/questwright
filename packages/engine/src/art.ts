@@ -113,6 +113,13 @@ const ICON_FRAMING = {
     'a square role-playing-game ability icon for this skill: one bold central emblem that captures what it does (a fist wreathed in energy, a glowing rune, a coiled serpent of flame), ' +
     'filling the square right to its edges with no margin, no rounded corners and no outer background, a strong readable silhouette that still reads at 48 pixels; colour and glow chosen from its element or magic system',
 };
+/** Gear and loot: the object itself, like an inventory slot in a role-playing game. */
+const ITEM_ICON_FRAMING = {
+  aspect: '1:1' as Aspect,
+  framing:
+    'a square role-playing-game inventory icon of this item alone: the object centred at a slight three-quarter angle, filling most of the square edge to edge, its material, wear and ' +
+    'any enchantment glow shown clearly, a dark vignetted background with no table or scene, a strong readable silhouette that still reads at 48 pixels',
+};
 export const ICON_STYLE =
   'A hand-painted fantasy RPG spell and ability icon: thick painterly brushwork, saturated glowing colour on a dark vignetted background, strong rim light and inner glow, ' +
   'high contrast and simple shapes, the painting running edge to edge with only a thin worn bronze bevel at the very border. Classic massively-multiplayer game ability icon finish; ' +
@@ -156,7 +163,7 @@ export interface ArtExtra {
 }
 
 export function artPrompt(e: CompendiumEntry, extra: ArtExtra = {}): string {
-  const f = extra.icon ? ICON_FRAMING : FRAMING[e.category];
+  const f = extra.icon ? (e.category === 'item' ? ITEM_ICON_FRAMING : ICON_FRAMING) : FRAMING[e.category];
   const refs = extra.references;
   return [
     codexPrompt(e, { role: extra.role, description: extra.description }),

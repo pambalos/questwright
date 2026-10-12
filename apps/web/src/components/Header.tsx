@@ -3,9 +3,9 @@
 import { wordCount } from '@questwright/engine';
 import { useRef, useState } from 'react';
 import { desktop } from '@/lib/desktop';
-import { usePainter } from '@/lib/illustrator';
 import { useStudio } from '@/lib/store';
 import { ApiKeyDialog } from './ApiKeyDialog';
+import { PaintQueue } from './PaintQueue';
 import { SeriesImport } from './SeriesImport';
 import { Settings } from './Settings';
 
@@ -17,7 +17,6 @@ export function Header() {
   const [series, setSeries] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
   const [settings, setSettings] = useState(false);
-  const painter = usePainter();
   const words = wordCount(s.manuscript);
   const level = Math.floor(words / WORDS_PER_LEVEL) + 1;
   const pct = ((words % WORDS_PER_LEVEL) / WORDS_PER_LEVEL) * 100;
@@ -63,14 +62,7 @@ export function Header() {
         <span>{words.toLocaleString()} words · {s.achievements.length} achievements</span>
       </div>
       <span className={`pill ${ai.cls}`}><span className="dot" />{ai.text}</span>
-      <button
-        className={`pill painter ${s.painting.length ? 'busy' : painter.ready ? 'on' : 'off'}`}
-        title={painter.ready ? `Paintings are made by ${painter.label}, ${painter.local ? 'on this computer, free' : `${painter.where}, about $${painter.cost.toFixed(2)} each`}. Change it in Settings.` : `${painter.hint}.`}
-        onClick={() => setSettings(true)}
-      >
-        <span className="dot" />
-        {s.painting.length ? `Painting ${s.painting.length}…` : 'Painting'} · {painter.label}{painter.local ? ' (local)' : ''}
-      </button>
+      <PaintQueue onSettings={() => setSettings(true)} />
       {desktop() && (
         <button className="btn" onClick={() => setKeyOpen(true)}>
           {s.aiBackend?.kind === 'api' ? 'API key' : 'Add API key'}

@@ -194,6 +194,13 @@ export function useImages(ids: (string | undefined)[]): Record<string, string> {
   return got;
 }
 
+/** What a painting is of, for the queue and log: "Russ", "Flame Ward". */
+function nameOf(project: Project, key: string): string {
+  const k = isIconKey(key) ? key.slice(ICON.length) : key;
+  if (k.startsWith('char:')) return project.characters[k.slice(5)]?.name ?? k.slice(5);
+  return k.replace(/^lore:/, '').replace(/(^|\s)\w/g, (c) => c.toUpperCase());
+}
+
 /** Paints icons for these entries, one after another. */
 export function paintIcons(entryKeys: string[]) {
   for (const k of entryKeys) void illustrate(iconKey(k));
@@ -219,18 +226,29 @@ export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<
   const st = useStudio.getState();
   if (st.painting.includes(key)) return Promise.resolve();
   st.setPainting([...st.painting, key]);
+  const queuedBy = painterOf(st.images, st.imageKeys, st.localReady);
+  const job = newId();
+  st.logPaintJob({ id: job, key, name: nameOf(st.project, key), icon: isIconKey(key), painter: queuedBy.label, local: Boolean(queuedBy.local), status: 'queued', queuedAt: Date.now(), ...(opts.auto ? { auto: true } : {}) });
+  const cancelled = () => useStudio.getState().paintLog.find((j) => j.id === job)?.status === 'cancelled';
   const done = () => {
     const s = useStudio.getState();
-    s.setPainting(s.painting.filter((k) => k !== key));
+    if (!cancelled()) s.setPainting(s.painting.filter((k) => k !== key));
   };
   const run = chain.then(async () => {
+    if (cancelled()) return;
     const s = useStudio.getState();
+    const now = painterOf(s.images, s.imageKeys, s.localReady);
+    s.updatePaintJob(job, { status: 'running', startedAt: Date.now(), painter: now.label, local: Boolean(now.local) });
     const { provider, quality, localModel: localId } = s.images;
     const info = painterOf(s.images, s.imageKeys, s.localReady);
     if (!info.ready) throw new Error(`${info.hint} to paint with ${info.label}.`);
     const state = fold(s.project, s.manuscript);
     const icon = isIconKey(key);
-    const e = state.compendium.find((x) => x.key === (icon ? key.slice(ICON.length) : key));
+    const target = icon ? key.slice(ICON.length) : key;
+    // Everyday gear has no compendium entry; its icon is painted from its name.
+    const e =
+      state.compendium.find((x) => x.key === target) ??
+      (icon && target.startsWith('lore:') ? { key: target, name: nameOf(s.project, key), category: 'item' as const, firstAt: '', facts: [], traits: [], said: [], relations: [], aliases: [] } : undefined);
     if (!e) throw new Error('That entry is no longer in the compendium.');
     const extra = icon ? {} : artExtra(s.project, state, e);
     const signature = illustrationSignature(e, extra);
@@ -277,10 +295,12 @@ export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<
     await idbSet(imageKey(ill.id), b64ToBlob(painted.data, painted.mime));
     // An automatic repaint keeps the codex current; one asked for by hand waits for the author to approve it (unless it is the first).
     useStudio.getState().addIllustration(key, ill, opts.auto);
+    useStudio.getState().updatePaintJob(job, { status: 'done', endedAt: Date.now(), cost: ill.cost, painter: paintedBy(ill).split(' · ')[0] });
   });
   chain = run.catch(() => undefined);
   return run
     .catch((err: unknown) => {
+      useStudio.getState().updatePaintJob(job, { status: 'failed', endedAt: Date.now(), error: err instanceof Error ? err.message : 'Failed.' });
       useStudio.getState().toast({ kind: 'error', head: `Could not paint ${isIconKey(key) ? 'an icon for ' : ''}${key.replace(/^(icon:)?(char|lore):/, '')}`, body: err instanceof Error ? err.message : 'Try again.' });
     })
     .finally(done);

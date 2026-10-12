@@ -88,6 +88,26 @@ interface Persisted {
   images: ImageSettings;
   /** What paintings have cost this calendar month, in US dollars (estimated). */
   imageSpend: { month: string; usd: number };
+  /** Paintings and icons asked for: waiting, running, and the most recent finished ones. */
+  paintLog: PaintJob[];
+}
+
+export interface PaintJob {
+  id: string;
+  /** The illustration key: an entry key, or "icon:" and one. */
+  key: string;
+  name: string;
+  icon: boolean;
+  /** Who was asked to paint it, as shown to the author. */
+  painter: string;
+  local: boolean;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  queuedAt: number;
+  startedAt?: number;
+  endedAt?: number;
+  error?: string;
+  cost?: number;
+  auto?: boolean;
 }
 
 export interface ImageSettings {
@@ -164,6 +184,11 @@ export interface StudioState extends Persisted {
   setImageKeys(keys: Record<ImageProvider, boolean>): void;
   setLocalReady(ids: string[]): void;
   setPainting(keys: string[]): void;
+  logPaintJob(job: PaintJob): void;
+  updatePaintJob(id: string, patch: Partial<PaintJob>): void;
+  /** Takes a waiting painting out of the queue. */
+  cancelPaintJob(id: string): void;
+  clearPaintLog(): void;
   /** A new painting of an entry; the first one, or one asked for with `approve`, becomes the approved version. */
   addIllustration(key: string, ill: Illustration, approve?: boolean): void;
   approveIllustration(key: string, id: string): void;
@@ -303,6 +328,7 @@ export const useStudio = create<StudioState>()(
         imageKeys: { gemini: false, openai: false, flux: false },
         localReady: [],
         painting: [],
+        paintLog: [],
         flash: [],
         hydrated: false,
         skimming: null,
@@ -442,6 +468,21 @@ export const useStudio = create<StudioState>()(
         },
         setLocalReady(localReady) {
           set({ localReady });
+        },
+        logPaintJob(job) {
+          set({ paintLog: [...get().paintLog, job].slice(-80) });
+        },
+        updatePaintJob(id, patch) {
+          set({ paintLog: get().paintLog.map((j) => (j.id === id ? { ...j, ...patch } : j)) });
+        },
+        cancelPaintJob(id) {
+          const s = get();
+          const job = s.paintLog.find((j) => j.id === id);
+          if (job?.status !== 'queued') return;
+          set({ paintLog: s.paintLog.map((j) => (j.id === id ? { ...j, status: 'cancelled', endedAt: Date.now() } : j)), painting: s.painting.filter((k) => k !== job.key) });
+        },
+        clearPaintLog() {
+          set({ paintLog: get().paintLog.filter((j) => j.status === 'queued' || j.status === 'running') });
         },
         setPainting(painting) {
           set({ painting });
@@ -665,7 +706,7 @@ export const useStudio = create<StudioState>()(
       onRehydrateStorage: () => () => {
         useStudio.setState((s) => ({ hydrated: true, docVersion: s.docVersion + 1 }));
       },
-      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements, panelWidth: s.panelWidth, panelMode: s.panelMode, portraits: s.portraits, images: s.images, imageSpend: s.imageSpend }),
+      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements, panelWidth: s.panelWidth, panelMode: s.panelMode, portraits: s.portraits, images: s.images, imageSpend: s.imageSpend, paintLog: s.paintLog.filter((j) => j.status !== 'queued' && j.status !== 'running') }),
       merge: (persisted, current) => {
         const p = persisted as Partial<Persisted> | undefined;
         if (!p?.project || !p.doc) return current;

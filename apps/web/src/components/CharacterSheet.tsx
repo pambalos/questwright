@@ -8,7 +8,7 @@ import { SheetFigure } from './Painting';
 import { frameFromProse, modelFor } from '@/figure/vrm/models';
 import { desktop } from '@/lib/desktop';
 import { LoreFacts, LoreNote } from './Compendium';
-import { PaintIconsButton, SkillIcon } from './SkillIcon';
+import { IconImage, IconRow, PaintIconsButton, SkillIcon } from './SkillIcon';
 import { TalentTree } from './TalentTree';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
@@ -108,7 +108,7 @@ export function CharacterSheet({ sheet, world, compendium, warnings, flat, atPid
         onFocus={() => setHover(slot)}
         onBlur={() => setHover(null)}
       >
-        {it && <b className="tile-name">{it.item}</b>}
+        {it && <IconImage name={it.item} fallback={<b className="tile-name">{it.item}</b>} />}
         <small>{slot}</small>
       </div>
     );
@@ -142,6 +142,7 @@ export function CharacterSheet({ sheet, world, compendium, warnings, flat, atPid
           </div>
           <div className="scol">{right.map(tile)}</div>
         </div>
+        <div className="rows-tools gear-tools"><PaintIconsButton names={Object.values(sheet.equipment).map((e) => e.item)} /></div>
         <GearDetail
           slot={hover && sheet.equipment[hover] ? hover : picked}
           sheet={sheet}
@@ -269,10 +270,11 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid
             {wearable.length > 1 && <button className="mini on" onClick={() => putOn(oneEach(wearable))}>Wear all</button>}
           </div>
         )}
+        <div className="rows-tools"><PaintIconsButton names={Object.keys(s.items)} /></div>
         <div className="bag">
           {Object.entries(s.items).map(([n, v]) => (
             <button key={n} className={`cell${unsure(`item:${n}`) ? ' unsure' : ''}`} title={`${n}. Click to correct the count.`} onClick={() => correct('item', n, v.count)}>
-              <span className="glyph" style={{ color: rar(v.rarity) }}>{initials(n)}</span>
+              <span className="glyph" style={{ color: rar(v.rarity) }}><IconImage name={n} fallback={initials(n)} /></span>
               <span className="nm">{n}</span>
               <span className="qty">{unsure(`item:${n}`) ? '?' : ''}{v.count}</span>
             </button>
@@ -402,6 +404,7 @@ function GearDetail({ slot, sheet, compendium, flat, onJump, onCodex }: { slot: 
         </ul>
       )}
       {!traits.length && !entry?.facts.length && <p className="gd-none">The story has not described it yet.</p>}
+      <IconRow key={it.item} entryKey={loreKey(it.item)} name={it.item} label="Item icon" />
       <div className="gd-acts">
         {where && <button className="at" onClick={() => onJump(where.id)}>Put on {label(where)}</button>}
         {entry && <button className="mini" onClick={() => onCodex(entry.key)}>Open in codex</button>}

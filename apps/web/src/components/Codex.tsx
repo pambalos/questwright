@@ -133,7 +133,7 @@ export function Codex({ state, flat }: { state: WorldState; flat: PlacedParagrap
   const thumb = (e: CompendiumEntry) => {
     const c = e.characterId ? characters[e.characterId] : undefined;
     const s = e.characterId ? state.sheets[e.characterId] : undefined;
-    return <Painted entryKey={e.category === 'spell' || e.category === 'magic' ? iconKey(e.key) : e.key} fallback={c ? <Figure2D crop look={lookOf(c, protagonistId)} features={s ? gearFor(s) : []} style={style} label="" /> : <Emblem category={e.category} size={38} />} />;
+    return <Painted entryKey={e.category === 'spell' || e.category === 'magic' || e.category === 'item' ? iconKey(e.key) : e.key} fallback={c ? <Figure2D crop look={lookOf(c, protagonistId)} features={s ? gearFor(s) : []} style={style} label="" /> : <Emblem category={e.category} size={38} />} />;
   };
   const paragraphs = page ? page.text.split(/\n\s*\n/) : entry ? draft(entry) : [];
 
@@ -187,7 +187,9 @@ export function Codex({ state, flat }: { state: WorldState; flat: PlacedParagrap
                   )
                 }
               />
-              {(entry.category === 'spell' || entry.category === 'magic') && <IconRow key={`icon-${entry.key}`} entryKey={entry.key} name={entry.name} />}
+              {(entry.category === 'spell' || entry.category === 'magic' || entry.category === 'item') && (
+                <IconRow key={`icon-${entry.key}`} entryKey={entry.key} name={entry.name} label={entry.category === 'item' ? 'Item icon' : 'Ability icon'} />
+              )}
               {entry.relations.length > 0 && (
                 <div className="cx-links">
                   <h3>Connections</h3>
