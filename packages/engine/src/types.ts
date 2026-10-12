@@ -1,4 +1,4 @@
-import type { IllustrationSet } from './art';
+import type { ArtStyleKey, IllustrationSet } from './art';
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
@@ -125,7 +125,8 @@ export interface Project {
   archive?: Manuscript;
   /** Chapters of archived books still waiting for a character skim. */
   skimPending?: string[];
-  art?: { style: ArtStyle; render?: RenderStyle };
+  /** How characters are drawn (palette and figure renderer), and the look paintings are made in. */
+  art?: { style: ArtStyle; render?: RenderStyle; paint?: ArtStyleKey };
   /** Author's word on which magic system a skill belongs to, and what it builds on. Wins over the AI's reading. */
   skillPaths?: Record<string, { system: string | null; requires?: string }>;
   /** The author's own notes on compendium entries, by entry key. */

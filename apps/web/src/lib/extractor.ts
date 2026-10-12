@@ -3,6 +3,7 @@
 import { describeChange, flatten, fold, memoryFor, summarizeSheet } from '@questwright/engine';
 import { useEffect } from 'react';
 import type { ImageProvider } from './image-providers';
+import { fetchLocal } from './illustrator';
 import { useStudio, type AiBackend, type StudioState } from './store';
 
 const MAX_IN_FLIGHT = 2;
@@ -213,6 +214,7 @@ export function useAiStatus() {
       .then((d) => {
         if (!live) return;
         if (d.images) setImageKeys(d.images);
+        void fetchLocal(code);
         const backend = d.backend ? { kind: d.backend, plan: d.plan, signedOut: d.cliSignedOut } : null;
         setAiStatus(!d.ai ? 'off' : d.locked ? 'locked' : 'on', backend);
       })

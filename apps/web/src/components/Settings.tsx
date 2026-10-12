@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @next/next/no-img-element -- paintings are local blob: URLs, which next/image cannot optimise */
 
-import type { ArtStyle, RenderStyle } from '@questwright/engine';
+import { ART_STYLE_KEYS, ART_STYLES, type ArtStyle, type RenderStyle } from '@questwright/engine';
 import { useState } from 'react';
 import { Figure2D } from '@/figure/Figure2D';
 import { defaultLook, lookOf, STYLE_LABEL } from '@/figure/look';
@@ -9,6 +9,8 @@ import { desktop } from '@/lib/desktop';
 import { requestsFor } from '@/lib/extractor';
 import { PROVIDER_IDS, PROVIDERS, type ImageProvider } from '@/lib/image-providers';
 import { useImage } from '@/lib/illustrator';
+import { LOCAL_MODELS, localModel } from '@/lib/local-catalog';
+import { LocalModels } from './LocalModels';
 import { thisMonth, useStudio, type PanelMode } from '@/lib/store';
 import { ApiKeyDialog } from './ApiKeyDialog';
 
@@ -54,13 +56,28 @@ function Illustrations() {
   const count = useStudio((s) => Object.values(s.project.illustrations ?? {}).reduce((n, x) => n + x.versions.length, 0));
   const setImages = useStudio((s) => s.setImageSettings);
   const [keyFor, setKeyFor] = useState<ImageProvider | null>(null);
+  const paint = useStudio((s) => s.project.art?.paint ?? 'painted');
+  const setPaint = useStudio((s) => s.setPaintStyle);
+  const title = useStudio((s) => s.project.title);
   const spent = spend.month === thisMonth() ? spend.usd : 0;
-  const info = PROVIDERS[images.provider];
+  const cloud = images.provider === 'local' ? null : PROVIDERS[images.provider];
+  const localReady = useStudio((s) => s.localReady);
+  const lm = localModel(images.localModel) ?? LOCAL_MODELS.find((m) => localReady.includes(m.id));
 
   return (
     <section>
       <h3>Illustrations</h3>
       <p className="note">Painted pictures for the codex and character cards. Claude writes each picture&apos;s brief from what the book remembers; the service below paints it.</p>
+      <h4>Style <span className="scope">for “{title}”</span></h4>
+      <div className="paint-styles" role="radiogroup" aria-label="Painting style">
+        {ART_STYLE_KEYS.map((k) => (
+          <button key={k} role="radio" aria-checked={paint === k} className={`paint-style ps-${k}${paint === k ? ' sel' : ''}`} onClick={() => setPaint(k)}>
+            <b>{ART_STYLES[k].label}</b>
+            <small>{ART_STYLES[k].blurb}</small>
+          </button>
+        ))}
+      </div>
+      <h4>Painted by</h4>
       <div className="provider-cards" role="radiogroup" aria-label="Image service">
         {PROVIDER_IDS.map((id) => {
           const p = PROVIDERS[id];
@@ -83,12 +100,40 @@ function Illustrations() {
             </div>
           );
         })}
+        <div className={`provider-card${images.provider === 'local' ? ' sel' : ''}`}>
+          <button role="radio" aria-checked={images.provider === 'local'} className="provider-pick" onClick={() => setImages({ provider: 'local', localModel: lm?.id })}>
+            <b>Local model</b>
+            <span className="sub">On this computer</span>
+            <small>Free and private: paints on your own graphics card with a model you install below. Slower, and simpler than the cloud painters.</small>
+            <span className="price">Free · {localReady.length} installed</span>
+          </button>
+          <div className="provider-key">
+            <span className={`key-state${localReady.length ? ' on' : ''}`}>{lm && localReady.includes(lm.id) ? lm.name : 'Nothing installed'}</span>
+          </div>
+        </div>
       </div>
-      <h4>Quality</h4>
-      <div className="chips">
-        <button className={`chip${images.quality === 'final' ? ' sel' : ''}`} aria-pressed={images.quality === 'final'} onClick={() => setImages({ quality: 'final' })}>Full quality · {money(info.cost.final)}</button>
-        <button className={`chip${images.quality === 'draft' ? ' sel' : ''}`} aria-pressed={images.quality === 'draft'} onClick={() => setImages({ quality: 'draft' })}>Draft · {money(info.cost.draft)}</button>
-      </div>
+      {cloud ? (
+        <>
+          <h4>Quality</h4>
+          <div className="chips">
+            <button className={`chip${images.quality === 'final' ? ' sel' : ''}`} aria-pressed={images.quality === 'final'} onClick={() => setImages({ quality: 'final' })}>Full quality · {money(cloud.cost.final)}</button>
+            <button className={`chip${images.quality === 'draft' ? ' sel' : ''}`} aria-pressed={images.quality === 'draft'} onClick={() => setImages({ quality: 'draft' })}>Draft · {money(cloud.cost.draft)}</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <h4>Local model</h4>
+          {localReady.length ? (
+            <div className="chips">
+              {LOCAL_MODELS.filter((m) => localReady.includes(m.id)).map((m) => (
+                <button key={m.id} className={`chip${images.localModel === m.id ? ' sel' : ''}`} aria-pressed={images.localModel === m.id} onClick={() => setImages({ localModel: m.id })}>{m.name}</button>
+              ))}
+            </div>
+          ) : (
+            <p className="note">Install a model under Local models below, then pick it here.</p>
+          )}
+        </>
+      )}
       <label className="check">
         <input type="checkbox" checked={images.auto} onChange={(e) => setImages({ auto: e.target.checked })} />
         Paint automatically when an entry gains a description, or its look or gear changes
@@ -98,7 +143,7 @@ function Illustrations() {
         <input type="number" min={0} max={1000} step={1} value={images.monthlyCap} onChange={(e) => setImages({ monthlyCap: Math.max(0, Number(e.target.value) || 0) })} aria-label="Monthly limit in US dollars" />
       </label>
       <p className="note">
-        This month: about {money(spent)} on paintings ({count} {count === 1 ? 'painting' : 'paintings'} in this book). Estimates; your {info.company} bill is the real figure.
+        This month: about {money(spent)} on paintings ({count} {count === 1 ? 'painting' : 'paintings'} in this book). {cloud ? `Estimates; your ${cloud.company} bill is the real figure.` : 'Local paintings are free.'}
       </p>
       <h4>House style</h4>
       {styleRefs.length ? (
@@ -246,6 +291,8 @@ export function Settings({ onClose }: { onClose(): void }) {
             </div>
           )}
         </section>
+
+        <LocalModels />
 
         <ApiKeys />
 

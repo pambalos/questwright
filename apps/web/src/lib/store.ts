@@ -16,6 +16,7 @@ import {
   SAMPLE,
   SAMPLE_TITLE,
   type ArtStyle,
+  type ArtStyleKey,
   type Extraction,
   type Illustration,
   type Look,
@@ -28,7 +29,7 @@ import {
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { BLANK_DOC, docToManuscript, manuscriptToDoc } from './doc';
-import type { ImageProvider, ImageQuality } from './image-providers';
+import type { ImageProvider, ImageQuality, Painter } from './image-providers';
 import { idbDelete, idbGet, idbPersist, idbSet } from './idb-storage';
 import { newId } from './ids';
 import { ACHIEVEMENTS } from './achievements';
@@ -86,7 +87,9 @@ interface Persisted {
 }
 
 export interface ImageSettings {
-  provider: ImageProvider;
+  provider: Painter;
+  /** The installed local model to paint with, when the painter is 'local'. */
+  localModel?: string;
   quality: ImageQuality;
   /** Paint entries on their own when they gain a description or their look changes. */
   auto: boolean;
@@ -111,6 +114,8 @@ export interface StudioState extends Persisted {
   codexOpen: string | null;
   /** Which image services the server has a key for. */
   imageKeys: Record<ImageProvider, boolean>;
+  /** Local models ready to paint with (installed, with the runtime). */
+  localReady: string[];
   /** Entry keys being painted now. */
   painting: string[];
   inFlight: string[];
@@ -141,6 +146,8 @@ export interface StudioState extends Persisted {
   drawCharacter(characterId: string): void;
   setArtStyle(style: ArtStyle): void;
   setRenderStyle(render: RenderStyle): void;
+  /** The look this book's paintings are made in. */
+  setPaintStyle(style: ArtStyleKey): void;
   setPanelWidth(px: number): void;
   setPanelMode(mode: PanelMode): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
@@ -150,6 +157,7 @@ export interface StudioState extends Persisted {
   setCodexOpen(key: string | null): void;
   setImageSettings(patch: Partial<ImageSettings>): void;
   setImageKeys(keys: Record<ImageProvider, boolean>): void;
+  setLocalReady(ids: string[]): void;
   setPainting(keys: string[]): void;
   /** A new painting of an entry; the first one, or one asked for with `approve`, becomes the approved version. */
   addIllustration(key: string, ill: Illustration, approve?: boolean): void;
@@ -287,6 +295,7 @@ export const useStudio = create<StudioState>()(
         images: { provider: 'gemini', quality: 'final', auto: false, monthlyCap: 10 },
         imageSpend: { month: thisMonth(), usd: 0 },
         imageKeys: { gemini: false, openai: false, flux: false },
+        localReady: [],
         painting: [],
         flash: [],
         hydrated: false,
@@ -396,6 +405,10 @@ export const useStudio = create<StudioState>()(
           const s = get();
           set({ project: { ...s.project, art: { style: s.project.art?.style ?? 'painterly', render } } });
         },
+        setPaintStyle(paint) {
+          const p = get().project;
+          set({ project: { ...p, art: { style: p.art?.style ?? 'painterly', ...p.art, paint } } });
+        },
         setArtStyle(style) {
           const p = get().project;
           set({ project: { ...p, art: { ...p.art, style } } });
@@ -417,6 +430,9 @@ export const useStudio = create<StudioState>()(
         },
         setImageKeys(imageKeys) {
           set({ imageKeys });
+        },
+        setLocalReady(localReady) {
+          set({ localReady });
         },
         setPainting(painting) {
           set({ painting });

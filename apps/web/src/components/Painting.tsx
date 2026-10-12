@@ -1,10 +1,11 @@
 'use client';
 /* eslint-disable @next/next/no-img-element -- paintings are local blob: URLs, which next/image cannot optimise */
 
-import type { CompendiumEntry, WorldState } from '@questwright/engine';
+import { ART_STYLES, type CompendiumEntry, type WorldState } from '@questwright/engine';
 import { useState, type ReactNode } from 'react';
 import { PROVIDERS } from '@/lib/image-providers';
-import { illustrate, stale, useImage } from '@/lib/illustrator';
+import { illustrate, stale, useImage, usePainter } from '@/lib/illustrator';
+import { localModel } from '@/lib/local-catalog';
 import { useStudio } from '@/lib/store';
 
 const NONE: string[] = [];
@@ -23,14 +24,13 @@ export function PortraitInset({ characterId, name }: { characterId: string; name
   const openCodex = useStudio((s) => s.setCodexOpen);
   const url = useImage(id);
   const painting = useStudio((s) => s.painting.includes(key));
-  const provider = useStudio((s) => PROVIDERS[s.images.provider]);
-  const hasKey = useStudio((s) => s.imageKeys[s.images.provider]);
+  const painter = usePainter();
   if (!url)
     return (
       <button
         className="paint-inset"
-        disabled={painting || !hasKey}
-        title={hasKey ? `Paint ${name} with ${provider.label}` : `Add a ${provider.company} key in Settings to paint`}
+        disabled={painting || !painter.ready}
+        title={painter.ready ? `Paint ${name} with ${painter.label}` : `${painter.hint} to paint`}
         onClick={() => void illustrate(key)}
       >
         {painting ? 'Painting…' : 'Illustrate'}
@@ -64,8 +64,7 @@ export function PaintingPanel({ entry, state, figure }: { entry: CompendiumEntry
   const project = useStudio((s) => s.project);
   const styleRefs = useStudio((s) => s.project.styleRefs) ?? NONE;
   const painting = useStudio((s) => s.painting.includes(entry.key));
-  const images = useStudio((s) => s.images);
-  const hasKey = useStudio((s) => s.imageKeys[s.images.provider]);
+  const painter = usePainter();
   const approve = useStudio((s) => s.approveIllustration);
   const remove = useStudio((s) => s.deleteIllustration);
   const toggleStyle = useStudio((s) => s.toggleStyleRef);
@@ -75,7 +74,6 @@ export function PaintingPanel({ entry, state, figure }: { entry: CompendiumEntry
   const versions = set?.versions ?? [];
   const shown = versions.find((v) => v.id === picked) ?? versions.find((v) => v.id === set?.approved) ?? versions.at(-1);
   const url = useImage(shown?.id);
-  const info = PROVIDERS[images.provider];
   const outdated = versions.length > 0 && stale(project, state, entry);
 
   return (
@@ -94,8 +92,8 @@ export function PaintingPanel({ entry, state, figure }: { entry: CompendiumEntry
       <div className="pt-bar">
         <button
           className="pt-paint"
-          disabled={painting || !hasKey}
-          title={hasKey ? `${info.label}, about $${info.cost[images.quality].toFixed(2)}` : `Add a ${info.company} key in Settings`}
+          disabled={painting || !painter.ready}
+          title={painter.ready ? `${painter.label}${painter.cost ? `, about $${painter.cost.toFixed(2)}` : ', free on this computer'}` : painter.hint}
           onClick={() => {
             setPicked(null);
             setShowFigure(false);
@@ -107,7 +105,7 @@ export function PaintingPanel({ entry, state, figure }: { entry: CompendiumEntry
         {versions.length > 0 && figure && (
           <button className="mini" onClick={() => setShowFigure(!showFigure)}>{showFigure ? 'Show painting' : 'Show figure'}</button>
         )}
-        {!hasKey && <span className="cx-muted">Add a {info.company} key in Settings to paint.</span>}
+        {!painter.ready && <span className="cx-muted">{painter.hint} to paint.</span>}
         {outdated && !painting && <span className="cx-muted">The look has changed since this was painted.</span>}
       </div>
       {versions.length > 0 && !showFigure && shown && (
@@ -123,7 +121,7 @@ export function PaintingPanel({ entry, state, figure }: { entry: CompendiumEntry
               {styleRefs.includes(shown.id) ? 'House style ✓' : 'Use as house style'}
             </button>
             <button className="mini" onClick={() => { remove(entry.key, shown.id); setPicked(null); }}>Delete</button>
-            <span className="cx-muted pt-meta">{PROVIDERS[shown.provider as keyof typeof PROVIDERS]?.label ?? shown.provider} · {new Date(shown.createdAt).toLocaleDateString()}{shown.auto ? ' · automatic' : ''}</span>
+            <span className="cx-muted pt-meta">{shown.provider === 'local' ? (localModel(shown.model)?.name ?? shown.model) : (PROVIDERS[shown.provider as keyof typeof PROVIDERS]?.label ?? shown.provider)}{shown.style ? ` · ${ART_STYLES[shown.style].label}` : ''} · {new Date(shown.createdAt).toLocaleDateString()}{shown.auto ? ' · automatic' : ''}</span>
           </div>
         </>
       )}

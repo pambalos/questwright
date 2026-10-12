@@ -27,6 +27,8 @@ export interface Illustration {
   /** Estimated cost in US dollars. */
   cost: number;
   auto?: boolean;
+  /** The look it was painted in. */
+  style?: ArtStyleKey;
 }
 
 export interface IllustrationSet {
@@ -42,6 +44,54 @@ export const PAINTED_STYLE =
   'dramatic chiaroscuro lighting, rich but slightly muted earthy palette with one strong accent colour, believable anatomy, weight and materials (worn leather, dented steel, wet fur, ' +
   'chipped stone), a moody atmospheric background that softens into aged parchment at the edges. Serious, grounded, painterly; not anime, not cartoon, not 3D render, not photograph. ' +
   'No text, lettering, captions, borders, frames, watermarks or user interface.';
+
+const NO_TEXT = 'No text, lettering, captions, borders, frames, watermarks or user interface.';
+
+/** The looks a book's paintings can share. Each is described in plain terms: no artist, studio or brand names. */
+export const ART_STYLES = {
+  painted: {
+    label: 'Painted bestiary',
+    blurb: 'Oil and gouache plates, like a classic tabletop bestiary or game codex.',
+    text: PAINTED_STYLE,
+  },
+  ink: {
+    label: 'Storybook ink',
+    blurb: 'Pen-and-ink line work with a light wash, like the plates in an old printed book.',
+    text:
+      'A storybook book-plate illustration: confident pen-and-ink line work with fine cross-hatching for shadow, a restrained watercolour wash in two or three muted colours, ' +
+      'cream paper showing through, a vignette that fades to blank paper at the edges. Hand-drawn and printed-looking, not digital, not 3D, not photograph. ' + NO_TEXT,
+  },
+  watercolor: {
+    label: 'Watercolour',
+    blurb: 'Loose, luminous watercolour with soft edges and paper texture.',
+    text:
+      'A loose fantasy watercolour painting: transparent layered washes, soft blooms and hard edges where paint pooled, white paper left for highlights, ' +
+      'visible cold-press paper texture, a light and airy palette with deep accents in the shadows. Painterly and hand-made, not digital, not 3D. ' + NO_TEXT,
+  },
+  grim: {
+    label: 'Grim oil',
+    blurb: 'Dark, heavy oil painting: candle-lit, gritty and gothic.',
+    text:
+      'A dark gothic oil painting: heavy impasto brushwork, deep near-black shadows lit by a single warm candle or fire source, desaturated earth tones with blood-red or ' +
+      'sickly green accents, grime, rust and wear on every surface, a brooding, dangerous mood. Fine-art oil on canvas, not anime, not 3D render, not photograph. ' + NO_TEXT,
+  },
+  anime: {
+    label: 'Anime',
+    blurb: 'Clean cel-shaded anime illustration, like a light-novel cover.',
+    text:
+      'A polished anime key-visual illustration: clean confident line art, cel shading with two-tone shadows and soft gradient highlights, vivid but harmonious colours, ' +
+      'expressive eyes and dynamic pose, a painted fantasy background with atmospheric depth. Japanese light-novel illustration style, not 3D render, not photograph. ' + NO_TEXT,
+  },
+  cartoon: {
+    label: 'Cartoon',
+    blurb: 'Bold, friendly cartoon art with chunky shapes and flat colour.',
+    text:
+      'A bold stylised cartoon illustration: chunky exaggerated shapes and proportions, thick clean outlines, flat colours with simple soft shading, playful readable silhouette, ' +
+      'a simple painted background. Modern animated-series concept art feel, not photorealistic, not 3D render. ' + NO_TEXT,
+  },
+} as const;
+export type ArtStyleKey = keyof typeof ART_STYLES;
+export const ART_STYLE_KEYS = Object.keys(ART_STYLES) as ArtStyleKey[];
 
 const FRAMING: Record<LoreCategory, { aspect: Aspect; framing: string }> = {
   character: { aspect: '2:3', framing: 'a three-quarter-length character portrait, the figure standing and turned slightly, face clearly visible, gear and clothing shown in detail' },
@@ -84,6 +134,10 @@ export interface ArtExtra {
   look?: string;
   /** What the painting can lean on: a portrait of this subject, and house style examples. */
   references?: { subject: boolean; style: number };
+  /** The look to paint in; painted bestiary when not given. */
+  style?: ArtStyleKey;
+  /** A local model reads only a short prompt well: ask for one. */
+  short?: boolean;
 }
 
 export function artPrompt(e: CompendiumEntry, extra: ArtExtra = {}): string {
@@ -97,7 +151,10 @@ export function artPrompt(e: CompendiumEntry, extra: ArtExtra = {}): string {
     refs && (refs.subject || refs.style)
       ? `Reference images sent with the prompt: ${[refs.subject ? 'one approved painting of this same subject (keep their identity)' : '', refs.style ? `${refs.style} house style example${refs.style > 1 ? 's' : ''} (match the painting style only, not the content)` : ''].filter(Boolean).join('; ')}.`
       : '',
-    `Style paragraph to end with:\n${PAINTED_STYLE}`,
+    `Style paragraph to end with:\n${ART_STYLES[extra.style ?? 'painted'].text}`,
+    extra.short
+      ? 'This prompt is for a small local model that reads about 70 words at most: write the subject paragraph in 40 to 60 words of short comma-separated visual phrases, most important first, then a condensed one-line version of the style paragraph instead of the full one.'
+      : '',
   ]
     .filter(Boolean)
     .join('\n\n');

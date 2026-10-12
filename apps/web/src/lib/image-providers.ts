@@ -60,3 +60,6 @@ export const PROVIDERS: Record<ImageProvider, ProviderInfo> = {
 };
 
 export const PROVIDER_IDS = Object.keys(PROVIDERS) as ImageProvider[];
+
+/** Who paints: one of the cloud services, or a model installed on this computer. */
+export type Painter = ImageProvider | 'local';

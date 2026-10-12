@@ -13,11 +13,62 @@ import {
   type Project,
   type WorldState,
 } from '@questwright/engine';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { idbGet, idbSet } from './idb-storage';
 import { newId } from './ids';
-import { PROVIDERS } from './image-providers';
-import { imageKey, thisMonth, useStudio } from './store';
+import { PROVIDERS, type ImageProvider } from './image-providers';
+import { localModel, type LocalModel, type LocalStatus } from './local-catalog';
+import { imageKey, thisMonth, useStudio, type ImageSettings } from './store';
+
+/* ---------- who paints ---------- */
+
+export interface PainterInfo {
+  label: string;
+  /** Where it runs: a company, or this computer. */
+  where: string;
+  ready: boolean;
+  /** What to do when it is not ready. */
+  hint: string;
+  /** Estimated US dollars per painting. */
+  cost: number;
+  local?: LocalModel;
+}
+
+export function painterOf(images: ImageSettings, keys: Record<ImageProvider, boolean>, localReady: string[]): PainterInfo {
+  if (images.provider === 'local') {
+    const lm = localModel(images.localModel);
+    return {
+      label: lm?.name ?? 'Local model',
+      where: 'this computer',
+      ready: Boolean(lm && localReady.includes(lm.id)),
+      hint: lm ? `Install ${lm.name} in Settings → Local models` : 'Choose a local model in Settings',
+      cost: 0,
+      local: lm,
+    };
+  }
+  const p = PROVIDERS[images.provider];
+  return { label: p.label, where: p.company, ready: keys[images.provider], hint: `Add a ${p.company} key in Settings`, cost: p.cost[images.quality] };
+}
+
+export function usePainter(): PainterInfo {
+  const images = useStudio((s) => s.images);
+  const keys = useStudio((s) => s.imageKeys);
+  const localReady = useStudio((s) => s.localReady);
+  return useMemo(() => painterOf(images, keys, localReady), [images, keys, localReady]);
+}
+
+/** Asks the server what is installed, and keeps the list of models ready to paint with up to date. */
+export async function fetchLocal(accessCode: string): Promise<LocalStatus | null> {
+  try {
+    const res = await fetch('/api/local', { headers: { 'x-qw-access': accessCode } });
+    if (!res.ok) return null;
+    const s = (await res.json()) as LocalStatus;
+    useStudio.getState().setLocalReady(s.available && s.runtime.installed ? Object.keys(s.models).filter((id) => s.models[id]!.installed) : []);
+    return s;
+  } catch {
+    return null;
+  }
+}
 
 /* ---------- stored images ---------- */
 
@@ -125,9 +176,9 @@ export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<
   };
   const run = chain.then(async () => {
     const s = useStudio.getState();
-    const { provider, quality } = s.images;
-    const info = PROVIDERS[provider];
-    if (!s.imageKeys[provider]) throw new Error(`Add a ${info.company} key in Settings to paint with ${info.label}.`);
+    const { provider, quality, localModel: localId } = s.images;
+    const info = painterOf(s.images, s.imageKeys, s.localReady);
+    if (!info.ready) throw new Error(`${info.hint} to paint with ${info.label}.`);
     const state = fold(s.project, s.manuscript);
     const e = state.compendium.find((x) => x.key === key);
     if (!e) throw new Error('That entry is no longer in the compendium.');
@@ -141,14 +192,22 @@ export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<
         ...(s.project.styleRefs ?? []).filter((id) => id !== approved).map((id) => asReference(id, 'style')),
       ])
     ).filter((r): r is NonNullable<typeof r> => r !== null);
-    const notes = artPrompt(e, { ...extra, references: { subject: refs.some((r) => r.role === 'subject'), style: refs.filter((r) => r.role === 'style').length } });
+    const style = s.project.art?.paint ?? 'painted';
+    // A local model only starts from the subject's approved painting (image to image); it takes no style references.
+    const sent = info.local ? refs.filter((r) => r.role === 'subject') : refs;
+    const notes = artPrompt(e, {
+      ...extra,
+      style,
+      short: info.local?.shortPrompt,
+      references: info.local ? undefined : { subject: sent.some((r) => r.role === 'subject'), style: sent.filter((r) => r.role === 'style').length },
+    });
 
     // Without the AI, the notes themselves are a usable (if plainer) prompt.
     const art: ArtDirection =
       s.aiStatus === 'on'
         ? (await post<{ result: ArtDirection }>('/api/extract', { mode: 'art', notes })).result
         : { prompt: notes.replace('Style paragraph to end with:\n', ''), caption: e.name, aspect: defaultAspect(e.category) };
-    const painted = await post<{ mime: string; data: string; model: string }>('/api/illustrate', { provider, quality, prompt: art.prompt, aspect: art.aspect, refs });
+    const painted = await post<{ mime: string; data: string; model: string }>('/api/illustrate', { provider, quality, prompt: art.prompt, aspect: art.aspect, refs: sent, ...(info.local ? { localModel: localId } : {}) });
 
     const ill: Illustration = {
       id: newId(),
@@ -159,7 +218,8 @@ export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<
       aspect: art.aspect,
       signature,
       createdAt: Date.now(),
-      cost: info.cost[quality],
+      cost: info.cost,
+      style,
       ...(opts.auto ? { auto: true } : {}),
     };
     await idbSet(imageKey(ill.id), b64ToBlob(painted.data, painted.mime));
@@ -204,8 +264,9 @@ export function useAutoIllustrate() {
       }
       const changed = state.compendium.filter((e) => seen.get(e.key) !== sigs.get(e.key));
       seen = sigs;
-      if (!s.images.auto || !s.imageKeys[s.images.provider]) return;
-      const cost = PROVIDERS[s.images.provider].cost[s.images.quality];
+      const info = painterOf(s.images, s.imageKeys, s.localReady);
+      if (!s.images.auto || !info.ready) return;
+      const cost = info.cost;
       let budget = autoBudget();
       for (const e of changed) {
         if (budget < cost) break;

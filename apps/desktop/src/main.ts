@@ -179,6 +179,8 @@ async function startServer() {
       ...(key ? { ANTHROPIC_API_KEY: key } : {}),
       ...(claude ? { QW_CLAUDE_CLI: claude } : {}),
       ...imageEnv(),
+      // Local image models and their runtime are kept here.
+      QW_DATA_DIR: app.getPath('userData'),
     },
   });
   server = child;

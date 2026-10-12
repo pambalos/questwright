@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { artPrompt, illustrationSignature, paintable, PAINTED_STYLE } from '../src/art';
+import { ART_STYLES, artPrompt, illustrationSignature, paintable, PAINTED_STYLE } from '../src/art';
 import type { CompendiumEntry } from '../src/types';
 
 const entry = (over: Partial<CompendiumEntry> = {}): CompendiumEntry => ({
@@ -46,5 +46,13 @@ describe('illustration art direction', () => {
     expect(paintable(entry())).toBe(true);
     expect(paintable(entry({ facts: [] }))).toBe(false);
     expect(paintable(entry({ facts: [] }), { description: 'a hooded stranger' })).toBe(true);
+  });
+
+  it('paints in the chosen style, and asks for a short prompt for local models', () => {
+    const p = artPrompt(entry(), { style: 'ink' });
+    expect(p).toContain(ART_STYLES.ink.text);
+    expect(p).not.toContain(PAINTED_STYLE);
+    expect(artPrompt(entry(), { short: true })).toContain('40 to 60 words');
+    for (const s of Object.values(ART_STYLES)) expect(s.text).toMatch(/No text/);
   });
 });
