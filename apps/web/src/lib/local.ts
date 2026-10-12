@@ -118,8 +118,7 @@ export async function installRuntime(buildId?: RuntimeBuild['id']) {
   const archives = [build, ...(build.extras ?? [])].map((a, i) => ({ url: a.url, bytes: a.bytes, dest: join(dir, `download-${i}.zip`), label: a.url.split('/').pop()! }));
   await runJob('runtime', archives, async () => {
     for (const a of archives) {
-      // Windows 10 and later ship bsdtar, which unpacks zip files.
-      await exec('tar', ['-xf', a.dest, '-C', dir], { windowsHide: true });
+      await unzip(a.dest, dir);
       unlinkSync(a.dest);
     }
     flattenExe(dir);
@@ -128,6 +127,20 @@ export async function installRuntime(buildId?: RuntimeBuild['id']) {
     m.runtime = { build: build.id, version: RUNTIME.version };
     saveManifest(m);
   });
+}
+
+/**
+ * Unpacks a zip. Windows 10 and later ship bsdtar in System32, which reads zip
+ * files; it is called by full path, because another tar on the PATH (Git's GNU
+ * tar) reads "C:" as a remote host and cannot unpack zips.
+ */
+async function unzip(file: string, dir: string) {
+  const tar = process.platform === 'win32' ? join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
+  if (process.platform !== 'win32' || existsSync(tar)) {
+    await exec(tar, ['-xf', file, '-C', dir], { windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+    return;
+  }
+  await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath '${file.replace(/'/g, "''")}' -DestinationPath '${dir.replace(/'/g, "''")}' -Force`], { windowsHide: true });
 }
 
 /** Some release zips put everything in a sub-folder: lift it up a level. */
