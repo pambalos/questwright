@@ -61,7 +61,7 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
   const project = useStudio((s) => s.project);
   const setDock = useStudio((s) => s.setCodexDock);
   const [artOpen, setArtOpen] = useState(false);
-  // Docked, the list shows a few entries (scrollable) until expanded.
+  // Docked, the list shows two entries, or eight expanded; it scrolls either way.
   const [listOpen, setListOpen] = useState(false);
   const art = useMemo(() => new Map(artTargets(project, state).map((t) => [t.entryKey, t])), [project, state]);
   const target = useStudio((s) => s.codexOpen);
@@ -188,9 +188,9 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
             ))}
             {!entries.length && <p className="cx-empty">Nothing here{q ? ' matches' : ' yet'}.</p>}
           </div>
-          {docked && entries.length > 3 && (
+          {docked && entries.length > 2 && (
             <button className="cx-more" aria-expanded={listOpen} onClick={() => setListOpen(!listOpen)}>
-              {listOpen ? 'Show fewer' : `Show all ${entries.length}`}
+              {listOpen ? 'Smaller' : 'Expand'}
             </button>
           )}
         </aside>
