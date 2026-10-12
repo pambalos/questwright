@@ -4,7 +4,7 @@
 import { ART_STYLES, type CompendiumEntry, type WorldState } from '@questwright/engine';
 import { useState, type ReactNode } from 'react';
 import { PROVIDERS } from '@/lib/image-providers';
-import { illustrate, stale, useImage, usePainter } from '@/lib/illustrator';
+import { illustrate, paintedBy, stale, useImage, usePainter } from '@/lib/illustrator';
 import { localModel } from '@/lib/local-catalog';
 import { useStudio } from '@/lib/store';
 
@@ -115,7 +115,10 @@ export function PaintingPanel({ entry, state, figure }: { entry: CompendiumEntry
         {shown && !showFigure ? (
           <figure className="pt-frame">
             {url ? <img src={url} alt={shown.caption} /> : <span className="ph" />}
-            <figcaption>{shown.caption}</figcaption>
+            <figcaption>
+              {shown.caption}
+              <small className="pt-by">{paintedBy(shown)}{shown.style ? ` · ${ART_STYLES[shown.style].label}` : ''}</small>
+            </figcaption>
           </figure>
         ) : (
           figure

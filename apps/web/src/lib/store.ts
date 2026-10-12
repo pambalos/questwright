@@ -44,6 +44,8 @@ export interface AiBackend {
   plan: string | null;
   /** Claude Code is set up but not signed in. */
   signedOut?: boolean;
+  /** The Claude model that reads, e.g. claude-opus-5-5. */
+  model?: string;
 }
 
 /** A book in the library, shown as a tab. Its id is its project id. */

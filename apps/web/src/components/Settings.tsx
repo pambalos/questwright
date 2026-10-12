@@ -8,7 +8,7 @@ import { defaultLook, lookOf, STYLE_LABEL } from '@/figure/look';
 import { desktop } from '@/lib/desktop';
 import { requestsFor } from '@/lib/extractor';
 import { PROVIDER_IDS, PROVIDERS, type ImageProvider } from '@/lib/image-providers';
-import { useImage } from '@/lib/illustrator';
+import { modelName, paintedBy, useImage, usePainter } from '@/lib/illustrator';
 import { LOCAL_MODELS, localModel } from '@/lib/local-catalog';
 import { LocalModels } from './LocalModels';
 import { thisMonth, useStudio, type PanelMode } from '@/lib/store';
@@ -83,6 +83,7 @@ function Illustrations() {
           const p = PROVIDERS[id];
           return (
             <div key={id} className={`provider-card${images.provider === id ? ' sel' : ''}`}>
+              {images.provider === id && <span className="in-use">In use</span>}
               <button role="radio" aria-checked={images.provider === id} className="provider-pick" onClick={() => setImages({ provider: id })}>
                 <b>{p.label}</b>
                 <span className="sub">{p.company}</span>
@@ -101,6 +102,7 @@ function Illustrations() {
           );
         })}
         <div className={`provider-card${images.provider === 'local' ? ' sel' : ''}`}>
+          {images.provider === 'local' && <span className="in-use">In use</span>}
           <button role="radio" aria-checked={images.provider === 'local'} className="provider-pick" onClick={() => setImages({ provider: 'local', localModel: lm?.id })}>
             <b>Local model</b>
             <span className="sub">On this computer</span>
@@ -195,6 +197,43 @@ function ApiKeys() {
   );
 }
 
+/** Which model does which job, at a glance. */
+function ModelsInUse() {
+  const aiStatus = useStudio((s) => s.aiStatus);
+  const aiBackend = useStudio((s) => s.aiBackend);
+  const painter = usePainter();
+  const made = useStudio((s) => s.project.illustrations);
+  const claude = aiStatus === 'on' && aiBackend ? `${modelName(aiBackend.model)} · ${aiBackend.kind === 'claude-cli' ? `your Claude ${aiBackend.plan ? aiBackend.plan[0]!.toUpperCase() + aiBackend.plan.slice(1) : ''} plan` : 'Anthropic API key'}` : null;
+  const paints = `${painter.label} · ${painter.local ? 'on this computer, free' : `${painter.where}, about $${painter.cost.toFixed(2)} each`}`;
+  const tally = new Map<string, number>();
+  for (const v of Object.values(made ?? {}).flatMap((x) => x.versions)) tally.set(paintedBy(v), (tally.get(paintedBy(v)) ?? 0) + 1);
+  const rows: [string, string | null, string?][] = [
+    ['Reading the book', claude, 'Off'],
+    ['Codex entries', claude, 'Off'],
+    ['Painting briefs', claude, 'Off: the notes are sent as they are'],
+    ['Paintings and portraits', painter.ready ? paints : null, painter.hint],
+    ['Skill and talent icons', painter.ready ? paints : null, painter.hint],
+  ];
+  return (
+    <section>
+      <h3>Models in use</h3>
+      <dl className="models-use">
+        {rows.map(([job, who, off]) => (
+          <div key={job}>
+            <dt>{job}</dt>
+            <dd className={who ? '' : 'off'}>{who ?? off}</dd>
+          </div>
+        ))}
+      </dl>
+      {tally.size > 0 && (
+        <p className="note">
+          Paintings in this book: {[...tally].map(([by, n]) => `${by.split(' · ')[0]} ×${n}`).join(', ')}.
+        </p>
+      )}
+    </section>
+  );
+}
+
 /** Settings for the open book (how its characters are drawn) and for the app (AI reading, panel layout). */
 export function Settings({ onClose }: { onClose(): void }) {
   const render = useStudio((s) => s.project.art?.render ?? 'anime');
@@ -245,6 +284,8 @@ export function Settings({ onClose }: { onClose(): void }) {
     <div className="modal" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
       <div className="dlg settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <h2 id="settings-title">Settings</h2>
+
+        <ModelsInUse />
 
         <section>
           <h3>Character art <span className="scope">for “{title}”</span></h3>

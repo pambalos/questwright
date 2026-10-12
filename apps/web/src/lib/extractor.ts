@@ -210,12 +210,12 @@ export function useAiStatus() {
   useEffect(() => {
     let live = true;
     fetch('/api/status', { headers: { 'x-qw-access': code } })
-      .then((r) => r.json() as Promise<{ ai: boolean; locked: boolean; backend: AiBackend['kind'] | null; plan: string | null; cliSignedOut?: boolean; images?: Record<ImageProvider, boolean> }>)
+      .then((r) => r.json() as Promise<{ ai: boolean; locked: boolean; backend: AiBackend['kind'] | null; plan: string | null; model?: string; cliSignedOut?: boolean; images?: Record<ImageProvider, boolean> }>)
       .then((d) => {
         if (!live) return;
         if (d.images) setImageKeys(d.images);
         void fetchLocal(code);
-        const backend = d.backend ? { kind: d.backend, plan: d.plan, signedOut: d.cliSignedOut } : null;
+        const backend = d.backend ? { kind: d.backend, plan: d.plan, model: d.model, signedOut: d.cliSignedOut } : null;
         setAiStatus(!d.ai ? 'off' : d.locked ? 'locked' : 'on', backend);
       })
       .catch(() => live && setAiStatus('off', null));

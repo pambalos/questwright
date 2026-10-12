@@ -50,6 +50,19 @@ export function painterOf(images: ImageSettings, keys: Record<ImageProvider, boo
   return { label: p.label, where: p.company, ready: keys[images.provider], hint: `Add a ${p.company} key in Settings`, cost: p.cost[images.quality] };
 }
 
+/** "claude-opus-5-5" as people say it: "Claude Opus 5.5". */
+export function modelName(id: string | undefined): string {
+  const m = /^claude-([a-z]+)-(\d+)-(\d+)/.exec(id ?? '');
+  return m ? `Claude ${m[1]![0]!.toUpperCase()}${m[1]!.slice(1)} ${m[2]}.${m[3]}` : id ? id : 'Claude';
+}
+
+/** Who made a painting, for its label: the painter and where it ran. */
+export function paintedBy(ill: Pick<Illustration, 'provider' | 'model'>): string {
+  if (ill.provider === 'local') return `${localModel(ill.model)?.name ?? ill.model} · on this computer`;
+  const p = PROVIDERS[ill.provider as ImageProvider];
+  return p ? `${p.label} · ${p.company}` : ill.provider;
+}
+
 export function usePainter(): PainterInfo {
   const images = useStudio((s) => s.images);
   const keys = useStudio((s) => s.imageKeys);
@@ -150,6 +163,42 @@ export function stale(project: Project, state: WorldState, e: CompendiumEntry): 
   return !last || last.signature !== illustrationSignature(e, artExtra(project, state, e));
 }
 
+/* ---------- ability icons ---------- */
+
+/** An entry's icon is kept like a painting, under "icon:" and the entry's key. */
+const ICON = 'icon:';
+export const iconKey = (entryKey: string) => `${ICON}${entryKey}`;
+export const isIconKey = (key: string) => key.startsWith(ICON);
+
+/** Object URLs for several stored images at once, by id (for lists and trees). */
+export function useImages(ids: (string | undefined)[]): Record<string, string> {
+  const [got, setGot] = useState<Record<string, string>>({});
+  const want = ids.filter((x): x is string => Boolean(x)).join('|');
+  useEffect(() => {
+    let live = true;
+    const list = want ? want.split('|') : [];
+    void Promise.all(
+      list.map(async (id) => {
+        if (urls.has(id)) return [id, urls.get(id)!] as const;
+        const b = await idbGet<Blob>(imageKey(id)).catch(() => undefined);
+        if (!b) return null;
+        const u = URL.createObjectURL(b);
+        urls.set(id, u);
+        return [id, u] as const;
+      }),
+    ).then((pairs) => live && setGot(Object.fromEntries(pairs.filter((p): p is readonly [string, string] => p !== null))));
+    return () => {
+      live = false;
+    };
+  }, [want]);
+  return got;
+}
+
+/** Paints icons for these entries, one after another. */
+export function paintIcons(entryKeys: string[]) {
+  for (const k of entryKeys) void illustrate(iconKey(k));
+}
+
 /* ---------- painting ---------- */
 
 let chain: Promise<unknown> = Promise.resolve();
@@ -180,17 +229,19 @@ export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<
     const info = painterOf(s.images, s.imageKeys, s.localReady);
     if (!info.ready) throw new Error(`${info.hint} to paint with ${info.label}.`);
     const state = fold(s.project, s.manuscript);
-    const e = state.compendium.find((x) => x.key === key);
+    const icon = isIconKey(key);
+    const e = state.compendium.find((x) => x.key === (icon ? key.slice(ICON.length) : key));
     if (!e) throw new Error('That entry is no longer in the compendium.');
-    const extra = artExtra(s.project, state, e);
+    const extra = icon ? {} : artExtra(s.project, state, e);
     const signature = illustrationSignature(e, extra);
 
     const approved = s.project.illustrations?.[key]?.approved;
+    // Icons match the book's other icons; paintings match the house style.
+    const styleIds = icon
+      ? Object.entries(s.project.illustrations ?? {}).filter(([k, v]) => isIconKey(k) && k !== key && v.approved).map(([, v]) => v.approved!).slice(-2)
+      : (s.project.styleRefs ?? []).filter((id) => id !== approved);
     const refs = (
-      await Promise.all([
-        approved ? asReference(approved, 'subject') : null,
-        ...(s.project.styleRefs ?? []).filter((id) => id !== approved).map((id) => asReference(id, 'style')),
-      ])
+      await Promise.all([approved ? asReference(approved, 'subject') : null, ...styleIds.map((id) => asReference(id, 'style'))])
     ).filter((r): r is NonNullable<typeof r> => r !== null);
     const style = s.project.art?.paint ?? 'painted';
     // A local model only starts from the subject's approved painting (image to image); it takes no style references.
@@ -198,6 +249,7 @@ export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<
     const notes = artPrompt(e, {
       ...extra,
       style,
+      icon,
       short: info.local?.shortPrompt,
       references: info.local ? undefined : { subject: sent.some((r) => r.role === 'subject'), style: sent.filter((r) => r.role === 'style').length },
     });
@@ -229,7 +281,7 @@ export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<
   chain = run.catch(() => undefined);
   return run
     .catch((err: unknown) => {
-      useStudio.getState().toast({ kind: 'error', head: `Could not paint ${key.replace(/^(char|lore):/, '')}`, body: err instanceof Error ? err.message : 'Try again.' });
+      useStudio.getState().toast({ kind: 'error', head: `Could not paint ${isIconKey(key) ? 'an icon for ' : ''}${key.replace(/^(icon:)?(char|lore):/, '')}`, body: err instanceof Error ? err.message : 'Try again.' });
     })
     .finally(done);
 }

@@ -8,6 +8,7 @@ import { SheetFigure } from './Painting';
 import { frameFromProse, modelFor } from '@/figure/vrm/models';
 import { desktop } from '@/lib/desktop';
 import { LoreFacts, LoreNote } from './Compendium';
+import { PaintIconsButton, SkillIcon } from './SkillIcon';
 import { TalentTree } from './TalentTree';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
@@ -283,8 +284,10 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid
     case 'skills':
       return (
         <div className="rows">
+          <div className="rows-tools"><PaintIconsButton names={s.skills.filter((k) => !k.system).map((k) => k.name)} /></div>
           {s.skills.filter((k) => !k.system).map((k) => (
-            <div className="row" key={k.name}>
+            <div className="row skill-row" key={k.name}>
+              <SkillIcon name={k.name} />
               <span>
                 {k.name}
                 {k.evolvedFrom && <span className="sub">Evolved from {k.evolvedFrom}</span>}

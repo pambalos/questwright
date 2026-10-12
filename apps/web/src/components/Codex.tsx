@@ -6,9 +6,11 @@ import { Figure2D } from '@/figure/Figure2D';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
+import { iconKey } from '@/lib/illustrator';
 import { useStudio } from '@/lib/store';
 import { LoreFacts, LoreNote } from './Compendium';
 import { Painted, PaintingPanel } from './Painting';
+import { IconRow } from './SkillIcon';
 
 const BOOKS: { key: LoreCategory; title: string }[] = [
   { key: 'character', title: 'Characters' },
@@ -131,7 +133,7 @@ export function Codex({ state, flat }: { state: WorldState; flat: PlacedParagrap
   const thumb = (e: CompendiumEntry) => {
     const c = e.characterId ? characters[e.characterId] : undefined;
     const s = e.characterId ? state.sheets[e.characterId] : undefined;
-    return <Painted entryKey={e.key} fallback={c ? <Figure2D crop look={lookOf(c, protagonistId)} features={s ? gearFor(s) : []} style={style} label="" /> : <Emblem category={e.category} size={38} />} />;
+    return <Painted entryKey={e.category === 'spell' || e.category === 'magic' ? iconKey(e.key) : e.key} fallback={c ? <Figure2D crop look={lookOf(c, protagonistId)} features={s ? gearFor(s) : []} style={style} label="" /> : <Emblem category={e.category} size={38} />} />;
   };
   const paragraphs = page ? page.text.split(/\n\s*\n/) : entry ? draft(entry) : [];
 
@@ -185,6 +187,7 @@ export function Codex({ state, flat }: { state: WorldState; flat: PlacedParagrap
                   )
                 }
               />
+              {(entry.category === 'spell' || entry.category === 'magic') && <IconRow key={`icon-${entry.key}`} entryKey={entry.key} name={entry.name} />}
               {entry.relations.length > 0 && (
                 <div className="cx-links">
                   <h3>Connections</h3>

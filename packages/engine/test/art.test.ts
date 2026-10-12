@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ART_STYLES, artPrompt, illustrationSignature, paintable, PAINTED_STYLE } from '../src/art';
+import { ART_STYLES, ICON_STYLE, artPrompt, illustrationSignature, paintable, PAINTED_STYLE } from '../src/art';
 import type { CompendiumEntry } from '../src/types';
 
 const entry = (over: Partial<CompendiumEntry> = {}): CompendiumEntry => ({
@@ -54,5 +54,13 @@ describe('illustration art direction', () => {
     expect(p).not.toContain(PAINTED_STYLE);
     expect(artPrompt(entry(), { short: true })).toContain('40 to 60 words');
     for (const s of Object.values(ART_STYLES)) expect(s.text).toMatch(/No text/);
+  });
+
+  it('frames a skill as a square ability icon', () => {
+    const p = artPrompt(entry({ category: 'spell', name: 'Flame Ward' }), { icon: true, style: 'ink', references: { subject: false, style: 2 } });
+    expect(p).toContain('ability icon');
+    expect(p).toContain('Suggested aspect: 1:1');
+    expect(p).toContain('2 other icons from this book');
+    expect(p.endsWith(ICON_STYLE)).toBe(true);
   });
 });

@@ -106,6 +106,19 @@ const FRAMING: Record<LoreCategory, { aspect: Aspect; framing: string }> = {
 
 export const defaultAspect = (c: LoreCategory): Aspect => FRAMING[c].aspect;
 
+/** Ability icons: one emblem per skill, readable when small, all sharing one frame and finish. */
+const ICON_FRAMING = {
+  aspect: '1:1' as Aspect,
+  framing:
+    'a square role-playing-game ability icon for this skill: one bold central emblem that captures what it does (a fist wreathed in energy, a glowing rune, a coiled serpent of flame), ' +
+    'filling the square right to its edges with no margin, no rounded corners and no outer background, a strong readable silhouette that still reads at 48 pixels; colour and glow chosen from its element or magic system',
+};
+export const ICON_STYLE =
+  'A hand-painted fantasy RPG spell and ability icon: thick painterly brushwork, saturated glowing colour on a dark vignetted background, strong rim light and inner glow, ' +
+  'high contrast and simple shapes, the painting running edge to edge with only a thin worn bronze bevel at the very border. Classic massively-multiplayer game ability icon finish; ' +
+  'not a phone app icon, not a badge on a background, not a photograph, not 3D render, ' +
+  'no text, letters, numbers or user interface.';
+
 export const ArtSchema = z.object({
   prompt: z.string(),
   caption: z.string(),
@@ -138,10 +151,12 @@ export interface ArtExtra {
   style?: ArtStyleKey;
   /** A local model reads only a short prompt well: ask for one. */
   short?: boolean;
+  /** A square ability icon for a skill, spell, talent or magic system, instead of a painting. */
+  icon?: boolean;
 }
 
 export function artPrompt(e: CompendiumEntry, extra: ArtExtra = {}): string {
-  const f = FRAMING[e.category];
+  const f = extra.icon ? ICON_FRAMING : FRAMING[e.category];
   const refs = extra.references;
   return [
     codexPrompt(e, { role: extra.role, description: extra.description }),
@@ -149,9 +164,9 @@ export function artPrompt(e: CompendiumEntry, extra: ArtExtra = {}): string {
     extra.gear?.length ? `Equipped now:\n${extra.gear.map((g) => `- ${g}`).join('\n')}` : '',
     `Framing: ${f.framing}. Suggested aspect: ${f.aspect}.`,
     refs && (refs.subject || refs.style)
-      ? `Reference images sent with the prompt: ${[refs.subject ? 'one approved painting of this same subject (keep their identity)' : '', refs.style ? `${refs.style} house style example${refs.style > 1 ? 's' : ''} (match the painting style only, not the content)` : ''].filter(Boolean).join('; ')}.`
+      ? `Reference images sent with the prompt: ${[refs.subject ? (extra.icon ? 'the current icon for this same ability (keep its motif)' : 'one approved painting of this same subject (keep their identity)') : '', refs.style ? `${refs.style} ${extra.icon ? 'other icon' : 'house style example'}${refs.style > 1 ? 's' : ''} from this book (match the style, frame and finish only, not the content)` : ''].filter(Boolean).join('; ')}.`
       : '',
-    `Style paragraph to end with:\n${ART_STYLES[extra.style ?? 'painted'].text}`,
+    `Style paragraph to end with:\n${extra.icon ? ICON_STYLE : ART_STYLES[extra.style ?? 'painted'].text}`,
     extra.short
       ? 'This prompt is for a small local model that reads about 70 words at most: write the subject paragraph in 40 to 60 words of short comma-separated visual phrases, most important first, then a condensed one-line version of the style paragraph instead of the full one.'
       : '',
