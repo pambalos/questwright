@@ -14,6 +14,7 @@ import { LocalModels } from './LocalModels';
 import { thisMonth, useStudio, type PanelMode } from '@/lib/store';
 import { ApiKeyDialog } from './ApiKeyDialog';
 import { ArtStatus } from './ArtStatus';
+import { PatternList } from './LearnPattern';
 
 const NONE: string[] = [];
 
@@ -343,6 +344,11 @@ export function Settings({ onClose }: { onClose(): void }) {
               </div>
             </div>
           )}
+        </section>
+
+        <section>
+          <h3>Learned patterns <span className="scope">for “{title}”</span></h3>
+          <PatternList />
         </section>
 
         <LocalModels />

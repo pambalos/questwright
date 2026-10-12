@@ -1,4 +1,5 @@
 import type { ArtStyleKey, IllustrationSet } from './art';
+import type { LearnedPattern } from './patterns';
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
@@ -137,6 +138,8 @@ export interface Project {
   illustrations?: Record<string, IllustrationSet>;
   /** Images (illustration ids) every new painting should match in style. */
   styleRefs?: string[];
+  /** System message formats the author taught the parser. */
+  patterns?: LearnedPattern[];
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';

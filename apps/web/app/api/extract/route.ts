@@ -1,6 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import {
+  applyPattern,
+  compilePattern,
+  PATTERN_SYSTEM,
+  patternFromDraft,
+  patternPrompt,
+  PatternSchema,
   ART_SYSTEM,
   ArtSchema,
   BATCH_EXTRACTION_SYSTEM,
@@ -76,6 +82,8 @@ const BatchBody = z.object({
 const CodexBody = z.object({ mode: z.literal('codex'), notes: z.string().min(1).max(30000) });
 /** Art direction: the entry's memory and framing, laid out by artPrompt; the answer is an image prompt. */
 const ArtBody = z.object({ mode: z.literal('art'), notes: z.string().min(1).max(30000) });
+/** Learning a format: an example the author selected, and the paragraph around it. */
+const PatternBody = z.object({ mode: z.literal('pattern'), example: z.string().min(3).max(4000), context: z.string().max(12000).optional() });
 
 const fail = (status: number, error: string) => NextResponse.json({ error }, { status });
 
@@ -129,6 +137,25 @@ export async function POST(req: Request) {
   if (codex.success) {
     const r = await ask({ system: CODEX_SYSTEM, prompt: codex.data.notes, schema: CodexSchema, what: 'passage' });
     return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
+  }
+
+  const learn = PatternBody.safeParse(json);
+  if (learn.success) {
+    const { example, context } = learn.data;
+    // Claude writes the rule; it is kept only if it compiles and finds something in the example. One retry, told what went wrong.
+    let prompt = patternPrompt(example, context);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = await ask({ system: PATTERN_SYSTEM, prompt, schema: PatternSchema, what: 'passage' });
+      if (r instanceof Response) return r;
+      const pattern = patternFromDraft(r.result, 'draft', example);
+      const problem = !compilePattern(pattern) ? 'The regex does not compile in JavaScript.' : null;
+      const preview = problem ? [] : applyPattern(pattern, example, 'the character').map((x) => x.change);
+      if (!problem && preview.length) return NextResponse.json({ result: { pattern, explanation: r.result.explanation, preview }, model: MODEL });
+      prompt = `${patternPrompt(example, context)}
+
+Your previous answer did not work: ${problem ?? 'its regex matched nothing in the example, or a match lacked a required field'}. Previous regex: ${r.result.regex}. Write a corrected rule.`;
+    }
+    return fail(422, 'Claude could not write a rule that matches this example. Try selecting just the system message.');
   }
 
   const art = ArtBody.safeParse(json);

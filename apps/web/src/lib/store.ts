@@ -19,6 +19,7 @@ import {
   type ArtStyleKey,
   type Extraction,
   type Illustration,
+  type LearnedPattern,
   type Look,
   type Manuscript,
   type Project,
@@ -178,6 +179,10 @@ export interface StudioState extends Persisted {
   setPanelMode(mode: PanelMode): void;
   setPortraits(on: boolean): void;
   setCodexDock(dock: 'full' | 'panel'): void;
+  /** Learned system message formats: saving, switching or removing one reads the book again with them. */
+  savePattern(p: LearnedPattern): void;
+  updatePattern(id: string, patch: Partial<LearnedPattern>): void;
+  deletePattern(id: string): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
   setValue(pid: string, characterId: string, kind: 'currency' | 'item', name: string, value: number): void;
   /** A written codex entry for a compendium entry, and how many memories it was written from. */
@@ -433,6 +438,23 @@ export const useStudio = create<StudioState>()(
         },
         setPanelWidth(panelWidth) {
           set({ panelWidth: Math.round(panelWidth) });
+        },
+        savePattern(p) {
+          const s = get();
+          const patterns = [...(s.project.patterns ?? []).filter((x) => x.id !== p.id), p];
+          const d = derive({ ...s.project, patterns }, s.doc);
+          commit({ project: d.project, manuscript: d.manuscript, queue: d.queue });
+        },
+        updatePattern(id, patch) {
+          const s = get();
+          const patterns = (s.project.patterns ?? []).map((x) => (x.id === id ? { ...x, ...patch } : x));
+          const d = derive({ ...s.project, patterns }, s.doc);
+          commit({ project: d.project, manuscript: d.manuscript, queue: d.queue });
+        },
+        deletePattern(id) {
+          const s = get();
+          const d = derive({ ...s.project, patterns: (s.project.patterns ?? []).filter((x) => x.id !== id) }, s.doc);
+          commit({ project: d.project, manuscript: d.manuscript, queue: d.queue });
         },
         setCodexDock(codexDock) {
           set({ codexDock });

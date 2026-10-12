@@ -9,6 +9,7 @@ export * from './sample';
 export * from './slots';
 export * from './memory';
 export * from './art';
+export * from './patterns';
 
 import type { Project } from './types';
 

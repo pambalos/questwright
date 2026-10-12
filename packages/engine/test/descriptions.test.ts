@@ -14,4 +14,9 @@ describe('system descriptions of skills and items', () => {
     expect(parseParagraph('His focus landed on [Qi Slam]. It held appeal.').filter((x) => x.change.kind === 'lore')).toEqual([]);
     expect(parseParagraph('[Skill Acquired: Flame Ward (Lv 1)]').filter((x) => x.change.kind === 'lore')).toEqual([]);
   });
+
+  it('forgives a doubled closing bracket', () => {
+    const out = parseParagraph('[Tributary (Unique)]]: Instead of a quarter of all essence being given as tribute, it is shared evenly.').map((x) => x.change);
+    expect(out[0]).toMatchObject({ kind: 'lore', subject: 'Tributary', fact: expect.stringContaining('shared evenly') });
+  });
 });

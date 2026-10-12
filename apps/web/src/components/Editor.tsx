@@ -3,13 +3,15 @@
 import type { WorldState } from '@questwright/engine';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ParagraphFlagsExt, ParagraphIds, flagsKey, type ParagraphFlags } from '@/lib/editor-extensions';
 import { useStudio } from '@/lib/store';
+import { LearnPattern } from './LearnPattern';
 
 const SAVE_DELAY_MS = 400;
 
 export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: string | null }) {
+  const [learn, setLearn] = useState<{ example: string; context: string } | null>(null);
   const doc = useStudio((s) => s.doc);
   const docVersion = useStudio((s) => s.docVersion);
   const setDoc = useStudio((s) => s.setDoc);
@@ -84,6 +86,20 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
         >
           System box
         </button>
+        <button
+          className="btn"
+          disabled={!editor}
+          title="Select a system message the app does not pick up, and teach it the format"
+          onClick={() => {
+            if (!editor) return;
+            const { from, to, $from } = editor.state.selection;
+            const para = $from.parent.textContent;
+            const picked = editor.state.doc.textBetween(from, to, '\n').trim();
+            setLearn({ example: picked || para, context: para });
+          }}
+        >
+          Learn pattern
+        </button>
         <span className="hint">
           {archived > 0 && `${archived} earlier book${archived > 1 ? 's are' : ' is'} archived read-only; their system boxes still count. `}
           Bracketed lines are system boxes. Shift+Enter for a new line inside one.
@@ -92,6 +108,7 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
       <div className="page">
         <EditorContent editor={editor} />
       </div>
+      {learn && <LearnPattern example={learn.example} context={learn.context} onClose={() => setLearn(null)} />}
     </section>
   );
 }

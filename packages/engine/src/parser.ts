@@ -1,4 +1,5 @@
 import { isSystemBox } from './manuscript';
+import { applyPattern, type LearnedPattern } from './patterns';
 import type { Change } from './types';
 
 /**
@@ -10,6 +11,8 @@ import type { Change } from './types';
 export interface ParseContext {
   /** Name used when a system message does not say who it is about. */
   protagonist?: string;
+  /** Formats the author taught the app (see patterns.ts). */
+  patterns?: LearnedPattern[];
 }
 
 export interface ParsedChange {
@@ -32,11 +35,11 @@ function systemLines(text: string): string[] {
 }
 
 /** Bumped when the parser learns something new, so every paragraph is read again. */
-export const PARSER_VERSION = 2;
+export const PARSER_VERSION = 3;
 
 const RARITIES = 'Common|Uncommon|Rare|Epic|Legendary|Mythic|Unique|Artifact|Divine';
 /** "[Tactical Insight (Common)]: Grants a temporary boost…": a system description of a skill, item or title. */
-const DESCRIBED = new RegExp(String.raw`\[\s*([^\]\n:]{2,60}?)\s*(?:\((${RARITIES})\))?\s*\]\s*:\s*([^\n\[]{12,800})`, 'gi');
+const DESCRIBED = new RegExp(String.raw`\[\s*([^\]\n:]{2,60}?)\s*(?:\((${RARITIES})\))?\s*\]+\s*:\s*([^\n\[]{12,800})`, 'gi');
 /** The same inside a system box, without brackets: "Tactical Insight (Common): Grants…". */
 const DESCRIBED_LINE = new RegExp(String.raw`^([A-Z][^:\n]{1,58}?)\s*\((${RARITIES})\)\s*:\s*(.{12,800})$`, 'i');
 
@@ -68,9 +71,10 @@ function descriptions(text: string): ParsedChange[] {
 }
 
 export function parseParagraph(text: string, ctx: ParseContext = {}): ParsedChange[] {
+  const learned = learnedChanges(text, ctx);
   const lines = systemLines(text);
-  if (!lines.length) return [];
-  const out: ParsedChange[] = descriptions(text);
+  if (!lines.length) return learned;
+  const out: ParsedChange[] = [...descriptions(text), ...learned];
   let boxSubject = ctx.protagonist;
 
   const welcome = /Welcome,\s*([A-Z][\w'-]*)/.exec(lines.join('\n'));
@@ -140,7 +144,21 @@ export function parseParagraph(text: string, ctx: ParseContext = {}): ParsedChan
       push({ kind: 'currency', character: who, currency: cap(m[3]!), delta: n });
     }
   }
-  return out;
+  // A learned pattern and a built-in rule can find the same thing: keep one.
+  const seen = new Set<string>();
+  return out.filter((x) => {
+    const k = JSON.stringify(x.change);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+function learnedChanges(text: string, ctx: ParseContext): ParsedChange[] {
+  const on = ctx.patterns?.filter((p) => p.enabled);
+  if (!on?.length) return [];
+  const who = /Welcome,\s*([A-Z][\w'-]*)/.exec(text)?.[1] ?? ctx.protagonist;
+  return on.flatMap((p) => applyPattern(p, text, who));
 }
 
 function plural(s: string): string {
