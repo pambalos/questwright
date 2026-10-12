@@ -17,6 +17,37 @@ export function Painted({ entryKey, fallback, className }: { entryKey: string; f
   return url ? <img className={className ?? 'painted'} src={url} alt="" /> : <>{fallback}</>;
 }
 
+/**
+ * A character's figure on their sheet: the 3D figure, or their approved
+ * painting when the author prefers portraits. A switch on the figure flips
+ * between them once a painting exists.
+ */
+export function SheetFigure({ characterId, name, figure }: { characterId: string; name: string; figure: ReactNode }) {
+  const id = useStudio((s) => s.project.illustrations?.[`char:${characterId}`]?.approved);
+  const url = useImage(id);
+  const portraits = useStudio((s) => s.portraits);
+  const setPortraits = useStudio((s) => s.setPortraits);
+  const show = portraits && url;
+  return (
+    <>
+      {show ? (
+        <div className="sheet-portrait">
+          <img src={url} alt={`Painting of ${name}`} />
+        </div>
+      ) : (
+        figure
+      )}
+      {!show && <PortraitInset characterId={characterId} name={name} />}
+      {url && (
+        <div className="fig-switch" role="group" aria-label="Show">
+          <button aria-pressed={!show} onClick={() => setPortraits(false)}>3D</button>
+          <button aria-pressed={Boolean(show)} onClick={() => setPortraits(true)}>Painting</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 /** A small painted portrait over a character's 3D figure; opens their codex page. */
 export function PortraitInset({ characterId, name }: { characterId: string; name: string }) {
   const key = `char:${characterId}`;

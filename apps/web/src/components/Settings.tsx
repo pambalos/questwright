@@ -201,6 +201,8 @@ export function Settings({ onClose }: { onClose(): void }) {
   const palette = useStudio((s) => s.project.art?.style ?? 'painterly');
   const setRender = useStudio((s) => s.setRenderStyle);
   const setPalette = useStudio((s) => s.setArtStyle);
+  const portraits = useStudio((s) => s.portraits);
+  const setPortraits = useStudio((s) => s.setPortraits);
   const title = useStudio((s) => s.project.title);
   const characters = useStudio((s) => s.project.characters);
   const protagonistId = useStudio((s) => s.project.protagonistId);
@@ -257,6 +259,10 @@ export function Settings({ onClose }: { onClose(): void }) {
               </button>
             ))}
           </div>
+          <label className="check">
+            <input type="checkbox" checked={portraits} onChange={(e) => setPortraits(e.target.checked)} />
+            Show a character&apos;s approved painting instead of their figure, on sheets and roster cards
+          </label>
           <h4>Colour palette</h4>
           <div className="chips">
             {(Object.keys(STYLE_LABEL) as ArtStyle[]).map((k) => (

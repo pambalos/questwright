@@ -1,6 +1,6 @@
 'use client';
 
-import { label, type PlacedParagraph, type WorldState } from '@questwright/engine';
+import { label, type Character, type PlacedParagraph, type Sheet, type WorldState } from '@questwright/engine';
 import { Figure2D } from '@/figure/Figure2D';
 import { Painted } from './Painting';
 import { gearFor } from '@/figure/gear';
@@ -17,6 +17,10 @@ export function Roster({ view, flat }: { view: WorldState; flat: PlacedParagraph
   const style = useStudio((s) => s.project.art?.style ?? 'painterly');
   const sheets = Object.values(view.sheets).sort((a, b) => (a.firstSeen ?? 0) - (b.firstSeen ?? 0));
   const others = (id: string) => Object.values(characters).filter((c) => c.id !== id && !c.mergedInto);
+  const portraits = useStudio((s) => s.portraits);
+  const figure = (c: Character, s: Sheet) => (
+    <Figure2D look={lookOf(c, protagonistId)} features={gearFor(s)} style={style} silhouette={!s.promoted && !c.drawn} label={s.promoted || c.drawn ? `${c.name}` : `${c.name}, not drawn yet`} />
+  );
 
   if (!sheets.length)
     return <p className="note">No characters yet. Name someone in the story, or write a system box such as “Welcome, Kael.”, and they will appear here.</p>;
@@ -31,10 +35,11 @@ export function Roster({ view, flat }: { view: WorldState; flat: PlacedParagraph
           return (
             <div className="rc" key={c.id}>
               <div className="rc-fig">
-                <Painted
-                  entryKey={`char:${c.id}`}
-                  fallback={<Figure2D look={lookOf(c, protagonistId)} features={gearFor(s)} style={style} silhouette={!s.promoted && !c.drawn} label={s.promoted || c.drawn ? `${c.name}` : `${c.name}, not drawn yet`} />}
-                />
+                {portraits ? (
+                  <Painted entryKey={`char:${c.id}`} fallback={figure(c, s)} />
+                ) : (
+                  figure(c, s)
+                )}
               </div>
               <b>{c.name}</b>
               <small>{c.role ? `${c.role} · ` : ''}first seen {s.firstSeen !== undefined ? label(flat[s.firstSeen]!) : '—'}</small>
