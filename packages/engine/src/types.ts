@@ -161,7 +161,8 @@ export interface Sheet {
   /** What the story has revealed about the character, in order: their backstory as it unfolds. */
   lore: { fact: string; at: string; recordId: string }[];
   items: Record<string, { count: number; rarity?: Rarity }>;
-  equipment: Record<string, { item: string; rarity?: Rarity }>;
+  /** What is worn or held, by slot, with the paragraph where it was put on. */
+  equipment: Record<string, { item: string; rarity?: Rarity; at?: string }>;
   titles: string[];
   blessings: string[];
   blessingPoints: number;

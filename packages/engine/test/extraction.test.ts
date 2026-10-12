@@ -28,7 +28,7 @@ describe('AI extraction contract', () => {
     expect(fold(project, SAMPLE).sheets.kael!.equipment).toEqual({});
     const claimed = { ...project, records: project.records.map((r) => (r.status === 'proposed' ? { ...r, status: 'applied' as const } : r)) };
     const s = fold(claimed, SAMPLE).sheets.kael!;
-    expect(s.equipment).toEqual({ Belt: { item: 'Iron Dagger', rarity: undefined } });
+    expect(s.equipment).toEqual({ Belt: { item: 'Iron Dagger', rarity: undefined, at: 'p4' } });
     expect(s.currencies.Gold).toBe(20);
   });
 

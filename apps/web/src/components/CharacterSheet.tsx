@@ -1,6 +1,6 @@
 'use client';
 
-import { FREE_POINTS, label, slotFor, type Rarity, type ArtStyle, type ContinuityWarning, type HairStyle, type Look, type Outfit, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
+import { FREE_POINTS, label, loreKey, slotFor, type CompendiumEntry, type Rarity, type ArtStyle, type ContinuityWarning, type HairStyle, type Look, type Outfit, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { studioCharacter } from '@/figure/studio';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
@@ -25,6 +25,8 @@ let liveInStudio: string | null = null;
 interface Props {
   sheet: Sheet;
   world: WorldDefs;
+  /** For what the story has said about each piece of gear. */
+  compendium: CompendiumEntry[];
   warnings: ContinuityWarning[];
   flat: PlacedParagraph[];
   /** Paragraph the panel is showing; author corrections are recorded there. */
@@ -32,7 +34,7 @@ interface Props {
   onJump(pid: string): void;
 }
 
-export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: Props) {
+export function CharacterSheet({ sheet, world, compendium, warnings, flat, atPid, onJump }: Props) {
   const character = useStudio((s) => s.project.characters[sheet.characterId]);
   const style: ArtStyle = useStudio((s) => s.project.art?.style ?? 'painterly');
   const render = useStudio((s) => s.project.art?.render ?? 'anime');
@@ -43,6 +45,9 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
   const wear = useStudio((s) => s.wear);
   const setSkillPath = useStudio((s) => s.setSkillPath);
   const [hover, setHover] = useState<string | null>(null);
+  /** The slot whose gear is shown in detail: clicked, or else hovered. */
+  const [picked, setPicked] = useState<string | null>(null);
+  const openCodex = useStudio((s) => s.setCodexOpen);
   const [editing, setEditing] = useState(false);
   const features = useMemo(() => gearFor(sheet), [sheet]);
   const manuscript = useStudio((s) => s.manuscript);
@@ -92,13 +97,17 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
         tabIndex={0}
         className={`tile${it ? '' : ' empty'}`}
         title={`${slot}: ${it ? it.item : 'empty'}`}
+        role={it ? 'button' : undefined}
+        aria-pressed={it ? picked === slot : undefined}
+        onClick={() => it && setPicked(picked === slot ? null : slot)}
+        onKeyDown={(e) => it && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setPicked(picked === slot ? null : slot))}
         style={it ? ({ '--rar': rar(it.rarity) } as React.CSSProperties) : undefined}
         onMouseEnter={() => setHover(slot)}
         onMouseLeave={() => setHover(null)}
         onFocus={() => setHover(slot)}
         onBlur={() => setHover(null)}
       >
-        {it && <b>{initials(it.item)}</b>}
+        {it && <b className="tile-name">{it.item}</b>}
         <small>{slot}</small>
       </div>
     );
@@ -132,6 +141,14 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
           </div>
           <div className="scol">{right.map(tile)}</div>
         </div>
+        <GearDetail
+          slot={hover && sheet.equipment[hover] ? hover : picked}
+          sheet={sheet}
+          compendium={compendium}
+          flat={flat}
+          onJump={onJump}
+          onCodex={(key) => openCodex(key)}
+        />
         <div className="card-info">
           {character.description && <p>{character.description}</p>}
           {!!character.aliases.length && <div className="meta">Also called: {character.aliases.join(', ')}</div>}
@@ -352,5 +369,40 @@ function Section({ id, title, count, children, magic }: { id: string; title: str
       </button>
       {!collapsed && <div className="pnl-b">{children}</div>}
     </section>
+  );
+}
+
+const RARITY_LABEL: Record<Rarity, string> = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
+
+/** The gear in one slot: what it is, when it was put on, and what the story has said about it. */
+function GearDetail({ slot, sheet, compendium, flat, onJump, onCodex }: { slot: string | null; sheet: Sheet; compendium: CompendiumEntry[]; flat: PlacedParagraph[]; onJump(pid: string): void; onCodex(key: string): void }) {
+  const it = slot ? sheet.equipment[slot] : undefined;
+  if (!slot || !it) {
+    return Object.keys(sheet.equipment).length ? <p className="gear-hint">Point at or click a slot to see the gear in it.</p> : null;
+  }
+  const entry = compendium.find((e) => e.key === loreKey(it.item));
+  const where = it.at ? flat.find((p) => p.id === it.at) : undefined;
+  const traits = entry ? [...new Set(entry.traits.map((t) => t.text))] : [];
+  const carried = Object.entries(sheet.items).find(([k]) => k.toLowerCase() === it.item.toLowerCase())?.[1];
+  return (
+    <div className="gear-detail" style={{ '--rar': rar(it.rarity) } as React.CSSProperties}>
+      <div className="gd-head">
+        <b>{it.item}</b>
+        <span className="gd-meta">
+          {[it.rarity ? RARITY_LABEL[it.rarity] : null, slot, carried && carried.count > 1 ? `${carried.count} carried` : null].filter(Boolean).join(' · ')}
+        </span>
+      </div>
+      {traits.length > 0 && <div className="gd-traits">{traits.slice(0, 6).map((t) => <span key={t}>{t}</span>)}</div>}
+      {entry && entry.facts.length > 0 && (
+        <ul className="gd-facts">
+          {entry.facts.slice(-3).map((f) => <li key={f.recordId}>{f.fact}</li>)}
+        </ul>
+      )}
+      {!traits.length && !entry?.facts.length && <p className="gd-none">The story has not described it yet.</p>}
+      <div className="gd-acts">
+        {where && <button className="at" onClick={() => onJump(where.id)}>Put on {label(where)}</button>}
+        {entry && <button className="mini" onClick={() => onCodex(entry.key)}>Open in codex</button>}
+      </div>
+    </div>
   );
 }

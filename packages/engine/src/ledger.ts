@@ -1,5 +1,6 @@
 import { flatten, label, type PlacedParagraph } from './manuscript';
 import { canonical } from './registry';
+import { canonicalSlot } from './slots';
 import type { ChangeRecord, CompendiumEntry, ContinuityWarning, LoreCategory, MagicSystem, Manuscript, PanelKey, Project, Registry, Sheet, WorldDefs, WorldState } from './types';
 
 const PANEL_ORDER: PanelKey[] = ['stats', 'equipment', 'inventory', 'skills', 'currencies', 'blessings', 'titles'];
@@ -29,6 +30,10 @@ const add = (list: string[], v: string) => {
 };
 
 /** Applied records in manuscript order; records on paragraphs that no longer exist are skipped. */
+
+/** The same item, however the story capitalised it. */
+const sameItem = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
 export function orderedRecords(records: ChangeRecord[], paras: Map<string, PlacedParagraph>): ChangeRecord[] {
   return records
     .map((r, i) => ({ r, i, at: paras.get(r.paragraphId)?.index }))
@@ -203,24 +208,33 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
         takeUp(id, systemName(world, c.system), p.id);
         break;
       case 'item': {
-        const v = c.set ?? (s.items[c.item]?.count ?? 0) + c.delta;
-        if (c.set !== undefined) (carried as Set<string> | null)?.delete(`${id}|item:${c.item}`);
+        // The same thing however it was capitalised: "shield" is the Shield already carried.
+        const key = Object.keys(s.items).find((k) => sameItem(k, c.item)) ?? c.item;
+        const v = c.set ?? (s.items[key]?.count ?? 0) + c.delta;
+        if (c.set !== undefined) (carried as Set<string> | null)?.delete(`${id}|item:${key}`);
         if (v < 0) warn(id, 'negative-item', `${name} gives up more ${c.item} than they have`);
-        if (v > 0) s.items[c.item] = { count: v, rarity: c.rarity ?? s.items[c.item]?.rarity };
+        if (v > 0) s.items[key] = { count: v, rarity: c.rarity ?? s.items[key]?.rarity };
+        else delete s.items[key];
+        // Gear that is lost, broken, sold or used up comes off with it.
+        if (v <= 0 && c.delta < 0) for (const [slot, e] of Object.entries(s.equipment)) if (sameItem(e.item, c.item)) delete s.equipment[slot];
         // Notable finds get a compendium entry; everyday things do not.
         if (c.delta > 0 && c.rarity && c.rarity !== 'common') entry(loreKey(c.item), c.item, 'item', p.id);
-        else delete s.items[c.item];
         unlock(id, 'inventory');
         break;
       }
-      case 'equip':
-        s.equipment[c.slot] = { item: c.item, rarity: c.rarity };
+      case 'equip': {
+        const slot = canonicalSlot(c.slot);
+        // One of a thing can only be in one place: moving the hammer from back to hand empties the back.
+        const owned = Object.entries(s.items).find(([k]) => sameItem(k, c.item))?.[1];
+        if ((owned?.count ?? 1) < 2) for (const [other, e] of Object.entries(s.equipment)) if (other !== slot && sameItem(e.item, c.item)) delete s.equipment[other];
+        s.equipment[slot] = { item: c.item, rarity: c.rarity ?? owned?.rarity, at: p.id };
         entry(loreKey(c.item), c.item, 'item', p.id);
-        add(world.slots, c.slot);
+        add(world.slots, slot);
         unlock(id, 'equipment');
         break;
+      }
       case 'unequip':
-        delete s.equipment[c.slot];
+        delete s.equipment[canonicalSlot(c.slot)];
         break;
       case 'blessing':
         if (!s.blessings.includes(c.blessing)) s.blessings.push(c.blessing);
@@ -273,7 +287,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
 }
 
 /** A known magic system's own spelling of a name, so "qi cultivation" and "Qi Cultivation" are one system. */
-const loreKey = (name: string) => `lore:${name.trim().toLowerCase()}`;
+export const loreKey = (name: string) => `lore:${name.trim().toLowerCase()}`;
 
 function systemName(world: WorldDefs, name: string): string {
   const n = name.trim();

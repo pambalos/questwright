@@ -88,7 +88,7 @@ export function Panel({ view, latest, flat, viewIndex }: Props) {
         ) : tab === 'world' ? (
           <WorldTab world={view.world} flat={flat} onJump={jump} />
         ) : sheet?.promoted ? (
-          <CharacterSheet sheet={sheet} world={view.world} warnings={view.warnings} flat={flat} atPid={at?.id ?? null} onJump={jump} />
+          <CharacterSheet sheet={sheet} world={view.world} compendium={view.compendium} warnings={view.warnings} flat={flat} atPid={at?.id ?? null} onJump={jump} />
         ) : (
           <div className="empty-tab">
             {characters[tab]?.name ?? 'This character'} has no sheet yet{at ? ` at ${label(at)}` : ''}.

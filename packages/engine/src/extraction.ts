@@ -93,7 +93,8 @@ const EXTRACTION_RULES = `Rules:
 - Attribute each change to the character it happens to. Use the known name or alias when the paragraph refers to a known character, including by pronoun when the previous paragraph makes the referent clear.
 - Reuse names from the world definitions when they mean the same thing, so "gold coins" becomes "Gold" and a known skill keeps its exact name.
 - amount: for items and currency, a positive count; for stat_change, the signed change. Use null when it does not apply.
-- equip: name is the item, slot is a short slot name such as Main hand, Off hand, Head, Chest, Belt, Ring, Back. Equipping something already carried is only an equip.
+- equip: name is the item as the story names it (keep its material: "Obsidian chestplate", not "chestplate"). slot is one of Main hand, Off hand, Head, Chest, Shoulders, Arms, Hands, Legs, Feet, Back, Belt, Neck, Ring; another name only for a place none of these covers. Equipping something already carried is only an equip; picking something up and putting it on at once is an item and an equip.
+- unequip: name null, slot the slot emptied. When gear is lost, broken, sold or destroyed, report the item with its amount (it comes off by itself); do not add an unequip.
 - appearance: a lasting physical change worth showing on the character's figure, such as a scar, a lost limb or a new tattoo. name is a short description.
 - rarity: only when the text signals it (glowing, legendary, a named artifact). Otherwise null.
 - skill: name is the skill. system: the magic system, discipline or path it belongs to (Qi Cultivation, Fire Magic, Swordsmanship) when the text or the world definitions make that clear, using a known system's exact name; otherwise null. requires: the known skill it builds on, evolves from or was unlocked by; otherwise null.
