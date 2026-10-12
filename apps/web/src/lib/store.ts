@@ -84,6 +84,8 @@ interface Persisted {
   panelMode: PanelMode;
   /** Show a character's approved painting in place of their figure, where they have one. */
   portraits: boolean;
+  /** The codex over the whole window, or in place of the side panel. */
+  codexDock: 'full' | 'panel';
   /** Painted illustrations: which service paints, at what quality, and whether new looks are painted on their own. */
   images: ImageSettings;
   /** What paintings have cost this calendar month, in US dollars (estimated). */
@@ -175,6 +177,7 @@ export interface StudioState extends Persisted {
   setPanelWidth(px: number): void;
   setPanelMode(mode: PanelMode): void;
   setPortraits(on: boolean): void;
+  setCodexDock(dock: 'full' | 'panel'): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
   setValue(pid: string, characterId: string, kind: 'currency' | 'item', name: string, value: number): void;
   /** A written codex entry for a compendium entry, and how many memories it was written from. */
@@ -323,6 +326,7 @@ export const useStudio = create<StudioState>()(
         panelWidth: 420,
         panelMode: 'open',
         portraits: false,
+        codexDock: 'full',
         images: { provider: 'gemini', quality: 'final', auto: false, monthlyCap: 10 },
         imageSpend: { month: thisMonth(), usd: 0 },
         imageKeys: { gemini: false, openai: false, flux: false },
@@ -429,6 +433,9 @@ export const useStudio = create<StudioState>()(
         },
         setPanelWidth(panelWidth) {
           set({ panelWidth: Math.round(panelWidth) });
+        },
+        setCodexDock(codexDock) {
+          set({ codexDock });
         },
         setPortraits(portraits) {
           set({ portraits });
@@ -706,7 +713,7 @@ export const useStudio = create<StudioState>()(
       onRehydrateStorage: () => () => {
         useStudio.setState((s) => ({ hydrated: true, docVersion: s.docVersion + 1 }));
       },
-      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements, panelWidth: s.panelWidth, panelMode: s.panelMode, portraits: s.portraits, images: s.images, imageSpend: s.imageSpend, paintLog: s.paintLog.filter((j) => j.status !== 'queued' && j.status !== 'running') }),
+      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements, panelWidth: s.panelWidth, panelMode: s.panelMode, portraits: s.portraits, codexDock: s.codexDock, images: s.images, imageSpend: s.imageSpend, paintLog: s.paintLog.filter((j) => j.status !== 'queued' && j.status !== 'running') }),
       merge: (persisted, current) => {
         const p = persisted as Partial<Persisted> | undefined;
         if (!p?.project || !p.doc) return current;

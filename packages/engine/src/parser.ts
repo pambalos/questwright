@@ -31,10 +31,46 @@ function systemLines(text: string): string[] {
   return [...text.matchAll(/\[[^\]\n]+\]/g)].map((m) => m[0]);
 }
 
+/** Bumped when the parser learns something new, so every paragraph is read again. */
+export const PARSER_VERSION = 2;
+
+const RARITIES = 'Common|Uncommon|Rare|Epic|Legendary|Mythic|Unique|Artifact|Divine';
+/** "[Tactical Insight (Common)]: Grants a temporary boost…": a system description of a skill, item or title. */
+const DESCRIBED = new RegExp(String.raw`\[\s*([^\]\n:]{2,60}?)\s*(?:\((${RARITIES})\))?\s*\]\s*:\s*([^\n\[]{12,800})`, 'gi');
+/** The same inside a system box, without brackets: "Tactical Insight (Common): Grants…". */
+const DESCRIBED_LINE = new RegExp(String.raw`^([A-Z][^:\n]{1,58}?)\s*\((${RARITIES})\)\s*:\s*(.{12,800})$`, 'i');
+
+/** What a description is of, from the words it uses. */
+function describedCategory(desc: string): 'spell' | 'item' | 'other' {
+  if (/\b(cooldown|cost:|duration|mana|qi\b|ability|skill|passive|active|grants|allows you|channel|cast|stamina)/i.test(desc)) return 'spell';
+  if (/\b(damage|defen[cs]e|armou?r|durability|weight|equip|slot|consumable|edible|material|crafting|potion|heals? \d)/i.test(desc)) return 'item';
+  return 'other';
+}
+
+/** Descriptions the system gives of skills, items and titles: kept as what the book says about them. */
+function descriptions(text: string): ParsedChange[] {
+  const out: ParsedChange[] = [];
+  const add = (name: string, rarity: string | undefined, desc: string, quote: string) => {
+    const fact = desc.trim().replace(/\s+/g, ' ');
+    const subject = name.trim();
+    if (!subject || /^(skill|item|title|class|level|status|system|quest|notice|warning)\b/i.test(subject)) return;
+    const category = describedCategory(fact);
+    out.push({ change: { kind: 'lore', subject, category, fact, lore: 'fact' }, quote });
+    if (rarity) out.push({ change: { kind: 'lore', subject, category, fact: rarity.toLowerCase(), lore: 'trait' }, quote });
+  };
+  for (const m of text.matchAll(DESCRIBED)) add(m[1]!, m[2], m[3]!, m[0].slice(0, 120));
+  if (isSystemBox(text))
+    for (const line of text.split('\n')) {
+      const m = DESCRIBED_LINE.exec(line.trim());
+      if (m) add(m[1]!, m[2], m[3]!, line.trim().slice(0, 120));
+    }
+  return out;
+}
+
 export function parseParagraph(text: string, ctx: ParseContext = {}): ParsedChange[] {
   const lines = systemLines(text);
   if (!lines.length) return [];
-  const out: ParsedChange[] = [];
+  const out: ParsedChange[] = descriptions(text);
   let boxSubject = ctx.protagonist;
 
   const welcome = /Welcome,\s*([A-Z][\w'-]*)/.exec(lines.join('\n'));

@@ -6,7 +6,8 @@ import { Figure2D } from '@/figure/Figure2D';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
-import { iconKey } from '@/lib/illustrator';
+import { artTargets, iconKey, type ArtType } from '@/lib/illustrator';
+import { ArtStatus } from './ArtStatus';
 import { useStudio } from '@/lib/store';
 import { LoreFacts, LoreNote } from './Compendium';
 import { Painted, PaintingPanel } from './Painting';
@@ -54,7 +55,13 @@ function draft(e: CompendiumEntry): string[] {
 }
 
 /** The compendium as a game codex: a book per kind of entry, a portrait, and a journal page written from memory. */
-export function Codex({ state, flat }: { state: WorldState; flat: PlacedParagraph[] }) {
+const ART_OF: Record<LoreCategory, ArtType> = { character: 'portrait', creature: 'painting', place: 'painting', faction: 'painting', other: 'painting', spell: 'ability', magic: 'ability', item: 'item' };
+
+export function Codex({ state, flat, docked }: { state: WorldState; flat: PlacedParagraph[]; docked?: boolean }) {
+  const project = useStudio((s) => s.project);
+  const setDock = useStudio((s) => s.setCodexDock);
+  const [artOpen, setArtOpen] = useState(false);
+  const art = useMemo(() => new Map(artTargets(project, state).map((t) => [t.entryKey, t])), [project, state]);
   const target = useStudio((s) => s.codexOpen);
   const setOpen = useStudio((s) => s.setCodexOpen);
   const jump = useStudio((s) => s.jump);
@@ -138,7 +145,7 @@ export function Codex({ state, flat }: { state: WorldState; flat: PlacedParagrap
   const paragraphs = page ? page.text.split(/\n\s*\n/) : entry ? draft(entry) : [];
 
   return (
-    <div className="codex-screen" role="dialog" aria-modal="true" aria-label="Codex">
+    <div className={`codex-screen${docked ? ' docked' : ''}`} role="dialog" aria-modal={!docked} aria-label="Codex">
       <header className="cx-top">
         <div className="cx-stats">
           <span>{state.compendium.length} entries</span>
@@ -152,18 +159,29 @@ export function Codex({ state, flat }: { state: WorldState; flat: PlacedParagrap
           <button className="cx-arrow" aria-label="Next book" onClick={() => go(1)}>▶</button>
           <div className="cx-dots" aria-hidden="true">{books.map((b) => <i key={b.key} className={b.key === book ? 'on' : ''} />)}</div>
         </nav>
-        <button className="cx-close" aria-label="Close the codex" title="Close (Esc)" onClick={() => setOpen(null)}>✕</button>
+        <div className="cx-tools">
+          <button className={`cx-tool${artOpen ? ' on' : ''}`} aria-pressed={artOpen} title="What has been painted, and paint the rest" onClick={() => setArtOpen(!artOpen)}>Art</button>
+          <button className="cx-tool" title={docked ? 'Full screen' : 'Show the codex in the side panel'} onClick={() => setDock(docked ? 'full' : 'panel')}>{docked ? '⤢' : '◧'}</button>
+          <button className="cx-close" aria-label="Close the codex" title="Close (Esc)" onClick={() => setOpen(null)}>✕</button>
+        </div>
       </header>
+      {artOpen && (
+        <div className="cx-art">
+          <ArtStatus state={state} />
+        </div>
+      )}
 
       <div className="cx-body">
         <aside className="cx-list">
           <input className="cx-search" type="search" placeholder="Search" aria-label="Search this book" value={query} onChange={(e) => setQuery(e.target.value)} />
+          {books[at] && <ArtStatus state={state} only={[ART_OF[books[at]!.key]]} compact />}
           <div className="cx-items" role="listbox" aria-label={books[at]?.title}>
             {entries.map((e) => (
               <button key={e.key} role="option" aria-selected={e.key === entry?.key} className={`cx-item${e.key === entry?.key ? ' on' : ''}`} onClick={() => setSelected(e.key)}>
                 <span className="cx-thumb">{thumb(e)}</span>
                 <span className="cx-name">{e.name}</span>
                 {written?.[e.key] && <span className="cx-quill" title="Entry written">✒</span>}
+                {art.get(e.key) && <span className={`cx-art-dot ${art.get(e.key)!.status}`} title={{ current: 'Painted in the current style', other: 'Painted in an older style', missing: 'Not painted yet' }[art.get(e.key)!.status]} />}
               </button>
             ))}
             {!entries.length && <p className="cx-empty">Nothing here{q ? ' matches' : ' yet'}.</p>}

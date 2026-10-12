@@ -1,8 +1,8 @@
 'use client';
 /* eslint-disable @next/next/no-img-element -- paintings are local blob: URLs, which next/image cannot optimise */
 
-import { ART_STYLE_KEYS, ART_STYLES, type ArtStyle, type RenderStyle } from '@questwright/engine';
-import { useState } from 'react';
+import { ART_STYLE_KEYS, ART_STYLES, fold, type ArtStyle, type RenderStyle } from '@questwright/engine';
+import { useMemo, useState } from 'react';
 import { Figure2D } from '@/figure/Figure2D';
 import { defaultLook, lookOf, STYLE_LABEL } from '@/figure/look';
 import { desktop } from '@/lib/desktop';
@@ -13,6 +13,7 @@ import { LOCAL_MODELS, localModel } from '@/lib/local-catalog';
 import { LocalModels } from './LocalModels';
 import { thisMonth, useStudio, type PanelMode } from '@/lib/store';
 import { ApiKeyDialog } from './ApiKeyDialog';
+import { ArtStatus } from './ArtStatus';
 
 const NONE: string[] = [];
 
@@ -60,6 +61,9 @@ function Illustrations() {
   const setPaint = useStudio((s) => s.setPaintStyle);
   const title = useStudio((s) => s.project.title);
   const spent = spend.month === thisMonth() ? spend.usd : 0;
+  const project = useStudio((s) => s.project);
+  const manuscript = useStudio((s) => s.manuscript);
+  const state = useMemo(() => fold(project, manuscript), [project, manuscript]);
   const cloud = images.provider === 'local' ? null : PROVIDERS[images.provider];
   const localReady = useStudio((s) => s.localReady);
   const lm = localModel(images.localModel) ?? LOCAL_MODELS.find((m) => localReady.includes(m.id));
@@ -147,6 +151,8 @@ function Illustrations() {
       <p className="note">
         This month: about {money(spent)} on paintings ({count} {count === 1 ? 'painting' : 'paintings'} in this book). {cloud ? `Estimates; your ${cloud.company} bill is the real figure.` : 'Local paintings are free.'}
       </p>
+      <h4>What is painted</h4>
+      <ArtStatus state={state} />
       <h4>House style</h4>
       {styleRefs.length ? (
         <div className="style-refs">{styleRefs.map((id) => <StyleRef key={id} id={id} />)}</div>

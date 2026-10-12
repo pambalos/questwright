@@ -614,3 +614,56 @@ button.pill.painter:hover { border-color: var(--gold); }
 .gear-detail .icon-big { width: 56px; height: 56px; font-size: 18px; }
 .pq.left .pq-pop { right: auto; left: 0; }
 .pq-pop { max-width: calc(100vw - 24px); }
+
+/* Codex tools, art status, and the codex docked in the side panel */
+.cx-tools { justify-self: end; display: flex; gap: 6px; align-items: center; }
+.cx-tool { height: 38px; min-width: 38px; padding: 0 10px; background: rgba(0,0,0,.35); border: 1px solid #5a554b; color: #e4ddcc; font: 13px var(--f-display); letter-spacing: .08em; border-radius: 2px; }
+.cx-tool:hover, .cx-tool.on { border-color: var(--gold); color: var(--gold); }
+.cx-art { margin: 0 28px 4px; padding: 10px 14px; border: 1px solid #5a554b; background: rgba(10,9,8,.92); }
+.cx-art-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.cx-art-dot.current { background: var(--gold); box-shadow: 0 0 6px rgba(214,164,67,.7); }
+.cx-art-dot.other { border: 1.5px solid #9a9384; }
+.cx-art-dot.missing { border: 1px dashed #5a554b; }
+.art-status { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color-scheme: dark; }
+.art-status .note { margin: 0; }
+.art-status table { width: 100%; border-collapse: collapse; }
+.art-status th { text-align: left; font: 600 10.5px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: #9a9384; padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.art-status td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.05); white-space: nowrap; }
+.as-bar { display: inline-block; width: 46px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); margin-right: 6px; vertical-align: middle; overflow: hidden; }
+.as-bar i { display: block; height: 100%; background: var(--gold); }
+.as-acts { text-align: right; }
+.as-acts .mini { margin-left: 4px; }
+.as-wait { color: var(--gold); font-size: 11.5px; margin-right: 4px; }
+.as-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.as-foot .check { font-size: 12px; color: #9a9384; display: flex; gap: 6px; align-items: center; }
+.art-status.compact thead, .art-status.compact td:first-child, .art-status.compact td:nth-child(3), .art-status.compact td:nth-child(4) { display: none; }
+.art-status.compact td { border: none; padding: 2px 0; }
+.art-status.compact .as-foot { display: none; }
+.cx-list .art-status .mini { color: #b8b0a0; border-color: #4a463e; }
+
+.codex-screen.docked { position: relative; inset: auto; z-index: 5; grid-column: -2 / -1; grid-row: 1; min-height: 0; border-radius: 10px; overflow: hidden; animation: none; container-type: inline-size; }
+.main.panel-mini > .codex-screen.docked { grid-column: 1 / -1; }
+/* The panel keeps its place under the docked codex, so nothing reflows. */
+.main:has(> .codex-screen.docked) > .hud { grid-column: -2 / -1; grid-row: 1; visibility: hidden; }
+.main.panel-mini:has(> .codex-screen.docked) > .editor { visibility: hidden; }
+.codex-screen.docked .cx-top { grid-template-columns: 1fr auto; padding: 10px 12px 4px; gap: 6px; }
+.codex-screen.docked .cx-stats { display: none; }
+.codex-screen.docked .cx-books { justify-self: start; column-gap: 6px; }
+.codex-screen.docked .cx-books h2 { font-size: 20px; min-width: 0; }
+.codex-screen.docked .cx-side { display: none; }
+.codex-screen.docked .cx-tool, .codex-screen.docked .cx-close { height: 30px; min-width: 30px; font-size: 12px; }
+.codex-screen.docked .cx-art { margin: 0 12px 4px; }
+.codex-screen.docked .cx-body { grid-template-columns: 1fr; overflow-y: auto; gap: 14px; padding: 8px 12px 16px; }
+.codex-screen.docked .cx-list { max-height: 34vh; }
+.codex-screen.docked .cx-figure { min-height: 300px; }
+.codex-screen.docked .cx-figure .v3d { min-height: 300px; }
+.codex-screen.docked .cx-page { overflow: visible; }
+@media (max-width: 880px) {
+  .main > .codex-screen.docked { grid-column: 1 / -1; grid-row: 2; height: 85vh; }
+  .main:has(> .codex-screen.docked) > .hud { display: none; }
+}
+.codex-screen.docked .cx-body { align-content: start; }
+.codex-screen.docked .cx-portrait, .codex-screen.docked .pt { flex: none; min-height: auto; }
+.codex-screen.docked .cx-figure { flex: none; height: 340px; }
+.codex-screen.docked .pt-frame { max-height: 340px; }
+.codex-screen.docked .cx-items { flex: none; max-height: 26vh; }

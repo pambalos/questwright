@@ -26,6 +26,7 @@ export function Studio() {
   const setPanelMode = useStudio((s) => s.setPanelMode);
   const render = useStudio((s) => s.project.art?.render ?? 'anime');
   const codexOpen = useStudio((s) => s.codexOpen);
+  const docked = useStudio((s) => s.codexDock === 'panel');
   const layout = useRef<HTMLDivElement>(null);
 
   const flat = useMemo(() => flatten(manuscript), [manuscript]);
@@ -66,8 +67,10 @@ export function Studio() {
         <Editor latest={latest} viewPid={scrub !== null ? flat[scrub]?.id ?? null : null} />
         {panelMode === 'open' && <PanelDivider layout={layout} />}
         <Panel view={view} latest={latest} flat={flat} viewIndex={viewIndex} />
+        {/* Docked, the codex takes the side panel's place (or the whole area when the panel is folded away). */}
+        {codexOpen !== null && docked && <Codex state={view} flat={flat} docked />}
       </div>
-      {codexOpen !== null && <Codex state={view} flat={flat} />}
+      {codexOpen !== null && !docked && <Codex state={view} flat={flat} />}
     </div>
   );
 }

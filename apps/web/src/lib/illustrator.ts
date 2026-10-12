@@ -222,7 +222,7 @@ async function post<T>(url: string, body: unknown): Promise<T> {
  * remembers, then the chosen image service paints it, keeping the approved
  * portrait and the house style as references. Paintings run one at a time.
  */
-export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<void> {
+export function illustrate(key: string, opts: { auto?: boolean; approve?: boolean } = {}): Promise<void> {
   const st = useStudio.getState();
   if (st.painting.includes(key)) return Promise.resolve();
   st.setPainting([...st.painting, key]);
@@ -294,7 +294,7 @@ export function illustrate(key: string, opts: { auto?: boolean } = {}): Promise<
     };
     await idbSet(imageKey(ill.id), b64ToBlob(painted.data, painted.mime));
     // An automatic repaint keeps the codex current; one asked for by hand waits for the author to approve it (unless it is the first).
-    useStudio.getState().addIllustration(key, ill, opts.auto);
+    useStudio.getState().addIllustration(key, ill, opts.auto || opts.approve);
     useStudio.getState().updatePaintJob(job, { status: 'done', endedAt: Date.now(), cost: ill.cost, painter: paintedBy(ill).split(' · ')[0] });
   });
   chain = run.catch(() => undefined);
@@ -363,4 +363,60 @@ export function useAutoIllustrate() {
       if (timer) clearTimeout(timer);
     };
   }, []);
+}
+
+/* ---------- what has been painted, and in which style ---------- */
+
+export type ArtType = 'portrait' | 'painting' | 'ability' | 'item';
+export const ART_TYPES: { type: ArtType; label: string }[] = [
+  { type: 'portrait', label: 'Character portraits' },
+  { type: 'painting', label: 'Creatures, places and factions' },
+  { type: 'ability', label: 'Skill and talent icons' },
+  { type: 'item', label: 'Item icons' },
+];
+
+export interface ArtTarget {
+  key: string;
+  /** The compendium entry it belongs to. */
+  entryKey: string;
+  name: string;
+  type: ArtType;
+  /** current: painted in the book's style (icons have one style of their own); other: an older style; missing: none approved. */
+  status: 'current' | 'other' | 'missing';
+  /** Too little is known yet for a good painting. */
+  thin: boolean;
+}
+
+/** Everything in the book that can have a picture, and whether it has one in the current style. */
+export function artTargets(project: Project, state: WorldState): ArtTarget[] {
+  const style = project.art?.paint ?? 'painted';
+  const out: ArtTarget[] = [];
+  const seen = new Set<string>();
+  const add = (t: Omit<ArtTarget, 'status'>) => {
+    if (seen.has(t.key)) return;
+    seen.add(t.key);
+    const set = project.illustrations?.[t.key];
+    const approved = set?.versions.find((v) => v.id === set.approved);
+    const icon = t.type === 'ability' || t.type === 'item';
+    out.push({ ...t, status: !approved ? 'missing' : icon || (approved.style ?? 'painted') === style ? 'current' : 'other' });
+  };
+  for (const e of state.compendium) {
+    if (e.category === 'character') add({ key: e.key, entryKey: e.key, name: e.name, type: 'portrait', thin: !paintable(e, artExtra(project, state, e)) });
+    else if (e.category === 'spell' || e.category === 'magic') add({ key: iconKey(e.key), entryKey: e.key, name: e.name, type: 'ability', thin: false });
+    else if (e.category === 'item') add({ key: iconKey(e.key), entryKey: e.key, name: e.name, type: 'item', thin: false });
+    else add({ key: e.key, entryKey: e.key, name: e.name, type: 'painting', thin: !paintable(e) });
+  }
+  // Everyday gear has no entry, but can still have an icon.
+  for (const s of Object.values(state.sheets))
+    for (const name of [...Object.keys(s.items), ...Object.values(s.equipment).map((e) => e.item)]) {
+      const entryKey = `lore:${name.trim().toLowerCase()}`;
+      add({ key: iconKey(entryKey), entryKey, name, type: 'item', thin: false });
+    }
+  return out;
+}
+
+/** Queues paintings for these targets, in order. */
+export function paintAll(targets: ArtTarget[]) {
+  // Painting everything means using what comes back: each new picture replaces the one shown.
+  for (const t of targets) void illustrate(t.key, { approve: true });
 }

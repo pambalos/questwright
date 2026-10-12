@@ -1,5 +1,5 @@
 import { flatten, hashText, isSystemBox, type PlacedParagraph } from './manuscript';
-import { parseParagraph } from './parser';
+import { PARSER_VERSION, parseParagraph } from './parser';
 import { repairMerges, resolveDrafts } from './registry';
 import type { ChangeRecord, Manuscript, Project } from './types';
 
@@ -26,7 +26,9 @@ export function reconcile(input: Project, manuscript: Manuscript, newId: () => s
   const byId = new Map(flat.map((p) => [p.id, p]));
   const hash = new Map(flat.map((p) => [p.id, hashText(p.text)]));
 
-  const reparse = new Set(flat.filter((p) => project.parsed[p.id] !== hash.get(p.id)).map((p) => p.id));
+  // A paragraph is read again when its text changes, or when the parser has learned something since.
+  const stamp = (id: string) => `${PARSER_VERSION}:${hash.get(id)}`;
+  const reparse = new Set(flat.filter((p) => project.parsed[p.id] !== stamp(p.id)).map((p) => p.id));
 
   const kept: ChangeRecord[] = [];
   for (const r of project.records) {
@@ -51,7 +53,7 @@ export function reconcile(input: Project, manuscript: Manuscript, newId: () => s
   const protagonist = () => (project.protagonistId ? project.characters[project.protagonistId]?.name : undefined);
   for (const p of flat) {
     if (!reparse.has(p.id)) continue;
-    project.parsed[p.id] = hash.get(p.id)!;
+    project.parsed[p.id] = stamp(p.id);
     const parsed = parseParagraph(p.text, { protagonist: protagonist() });
     if (!parsed.length) continue;
     const res = resolveDrafts(project.characters, parsed.map((x) => x.change));
