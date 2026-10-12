@@ -215,7 +215,7 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
                     {entry.relations.slice(-8).map((r) => (
                       <button key={r.recordId + r.direction} className="cx-link" title={r.direction === 'out' ? `${entry.name} ${r.relation} ${r.name}` : `${r.name} ${r.relation} ${entry.name}`} onClick={() => open(r.key)}>
                         <span className="cx-link-name">{r.name}</span>
-                        <span className="cx-link-rel">{r.direction === 'out' ? r.relation : `${r.relation} them`}</span>
+                        <span className="cx-link-rel">{r.direction === 'out' ? r.relation : `${r.relation} ${entry.name}`}</span>
                       </button>
                     ))}
                   </div>

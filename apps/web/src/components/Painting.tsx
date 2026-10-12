@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- paintings are local blob: URLs, which next/image cannot optimise */
 
 import { ART_STYLES, type CompendiumEntry, type WorldState } from '@questwright/engine';
-import { useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { PROVIDERS } from '@/lib/image-providers';
 import { illustrate, paintedBy, stale, useImage, usePainter } from '@/lib/illustrator';
 import { localModel } from '@/lib/local-catalog';
@@ -29,12 +29,28 @@ export function SheetFigure({ characterId, name, figure }: { characterId: string
   const setPortraits = useStudio((s) => s.setPortraits);
   const show = portraits && url;
   const [fill, setFill] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  // Fill the box only when the painting is nearly the box's shape (trimming a sliver); otherwise show it whole.
+  const fit = useCallback(() => {
+    const img = imgRef.current;
+    const box = img?.parentElement?.getBoundingClientRect();
+    if (!img || !box?.width || !box.height || !img.naturalWidth) return;
+    const ratio = img.naturalWidth / img.naturalHeight / (box.width / box.height);
+    setFill(ratio > 0.88 && ratio < 1.14);
+  }, []);
+  useEffect(() => {
+    const box = imgRef.current?.parentElement;
+    if (!box) return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [fit, show]);
   return (
     <>
       {show ? (
         <div className="sheet-portrait">
           {/* A painting near the box's own shape fills it (trimming a sliver); a much taller one is shown whole. */}
-          <img src={url} alt={`Painting of ${name}`} className={fill ? 'fill' : ''} onLoad={(e) => setFill(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight >= 0.74)} />
+          <img ref={imgRef} src={url} alt={`Painting of ${name}`} className={fill ? 'fill' : ''} onLoad={fit} />
         </div>
       ) : (
         figure

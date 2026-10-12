@@ -46,6 +46,8 @@ export function CharacterSheet({ sheet, world, compendium, warnings, flat, atPid
   const wear = useStudio((s) => s.wear);
   const setSkillPath = useStudio((s) => s.setSkillPath);
   const [hover, setHover] = useState<string | null>(null);
+  const showGear = useStudio((s) => s.showGear);
+  const setShowGear = useStudio((s) => s.setShowGear);
   /** The slot whose gear is shown in detail: clicked, or else hovered. */
   const [picked, setPicked] = useState<string | null>(null);
   const openCodex = useStudio((s) => s.setCodexOpen);
@@ -130,9 +132,12 @@ export function CharacterSheet({ sheet, world, compendium, warnings, flat, atPid
         <div className="doll-top">
           <h3>{name}</h3>
           {tag && <div className="ep">{tag}</div>}
+          <button className={`mini gear-toggle${showGear ? ' on' : ''}`} aria-pressed={showGear} title={showGear ? 'Hide the equipment slots' : 'Show the equipment slots'} onClick={() => setShowGear(!showGear)}>
+            Gear
+          </button>
         </div>
-        <div className="doll-grid">
-          <div className="scol">{left.map(tile)}</div>
+        <div className={`doll-grid${showGear ? '' : ' no-gear'}`}>
+          {showGear && <div className="scol">{left.map(tile)}</div>}
           <div className="fig3d">
             <SheetFigure
               characterId={sheet.characterId}
@@ -140,17 +145,17 @@ export function CharacterSheet({ sheet, world, compendium, warnings, flat, atPid
               figure={<CharacterModel character={character} suggestedModel={suggested} look={look} features={features} style={style} render={render} highlight={hover} label={`${name}, wearing what the story has given them`} />}
             />
           </div>
-          <div className="scol">{right.map(tile)}</div>
+          {showGear && <div className="scol">{right.map(tile)}</div>}
         </div>
-        <div className="rows-tools gear-tools"><PaintIconsButton names={Object.values(sheet.equipment).map((e) => e.item)} /></div>
-        <GearDetail
+        {showGear && <div className="rows-tools gear-tools"><PaintIconsButton names={Object.values(sheet.equipment).map((e) => e.item)} /></div>}
+        {showGear && <GearDetail
           slot={hover && sheet.equipment[hover] ? hover : picked}
           sheet={sheet}
           compendium={compendium}
           flat={flat}
           onJump={onJump}
           onCodex={(key) => openCodex(key)}
-        />
+        />}
         <div className="card-info">
           {character.description && <p>{character.description}</p>}
           {!!character.aliases.length && <div className="meta">Also called: {character.aliases.join(', ')}</div>}
