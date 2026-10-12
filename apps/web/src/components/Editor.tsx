@@ -3,10 +3,12 @@
 import type { WorldState } from '@questwright/engine';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import TextAlign from '@tiptap/extension-text-align';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ParagraphFlagsExt, ParagraphIds, flagsKey, type ParagraphFlags } from '@/lib/editor-extensions';
 import { useStudio } from '@/lib/store';
 import { LearnPattern } from './LearnPattern';
+import { FormatBar } from './FormatBar';
 import { Outline } from './Outline';
 
 const SAVE_DELAY_MS = 400;
@@ -29,7 +31,7 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
   const editor = useEditor(
     {
       immediatelyRender: false,
-      extensions: [StarterKit.configure({ heading: { levels: [1, 2] } }), ParagraphIds, ParagraphFlagsExt],
+      extensions: [StarterKit.configure({ heading: { levels: [1, 2] } }), TextAlign.configure({ types: ['heading', 'paragraph'] }), ParagraphIds, ParagraphFlagsExt],
       content: doc,
       editorProps: { attributes: { spellcheck: 'true', 'aria-label': 'Manuscript' } },
       onUpdate: ({ editor: ed }) => {
@@ -85,10 +87,11 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
         <button className={`btn ol-toggle${outlineOpen ? ' on' : ''}`} aria-pressed={outlineOpen} title={outlineOpen ? 'Hide contents' : 'Show contents'} onClick={() => setOutlineOpen(!outlineOpen)}>
           ☰ Contents
         </button>
-        <button className="btn" disabled={!editor} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>Chapter heading</button>
+        <FormatBar editor={editor} />
         <button
           className="btn"
           disabled={!editor}
+          title="Start a system box: bracketed lines are system messages. Shift+Enter for a new line inside one."
           onClick={() => editor?.chain().focus().insertContent({ type: 'paragraph', content: [{ type: 'text', text: '[' }] }).run()}
         >
           System box
@@ -107,10 +110,7 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
         >
           Learn pattern
         </button>
-        <span className="hint">
-          {archived > 0 && `${archived} earlier book${archived > 1 ? 's are' : ' is'} archived read-only; their system boxes still count. `}
-          Bracketed lines are system boxes. Shift+Enter for a new line inside one.
-        </span>
+        {archived > 0 && <span className="hint">{archived} earlier book{archived > 1 ? 's are' : ' is'} archived read-only; their system boxes still count.</span>}
       </div>
       <div className={`ed-body${outlineOpen ? ' with-outline' : ''}`}>
         {outlineOpen && <Outline scroller={pageEl} />}
