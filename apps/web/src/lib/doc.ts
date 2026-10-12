@@ -85,3 +85,40 @@ export const BLANK_DOC: JSONContent = {
     { type: 'paragraph', attrs: { pid: 'p-first' } },
   ],
 };
+
+export interface OutlineItem {
+  /** Index of the block among the document's top-level blocks (its place in the editor). */
+  index: number;
+  title: string;
+  kind: 'book' | 'chapter';
+  words: number;
+}
+
+/**
+ * The document's table of contents: books and chapters, read the same way
+ * docToManuscript reads them, with each chapter's word count.
+ */
+export function outlineOf(doc: JSONContent): OutlineItem[] {
+  const blocks = doc.content ?? [];
+  const headings = blocks.filter((n) => n.type === 'heading').map((n) => ({ level: Number(n.attrs?.level ?? 2), text: blockText(n).trim() }));
+  const nested = headings.some((h) => h.level >= 2 && h.text && isChapterMarker(h.text)) || headings.some((h) => h.level === 1 && isBookMarker(h.text));
+  const out: OutlineItem[] = [];
+  let current: OutlineItem | null = null;
+  blocks.forEach((n, index) => {
+    const text = blockText(n).trim();
+    if (n.type === 'heading') {
+      if (!text) return;
+      const level = Number(n.attrs?.level ?? 2);
+      const book = level === 1 && (isBookMarker(text) || (nested && !isChapterMarker(text)));
+      current = { index, title: text, kind: book ? 'book' : 'chapter', words: 0 };
+      out.push(current);
+      if (book) current = null;
+    } else if (n.type === 'paragraph') {
+      if (isChapterMarker(text) && !text.includes('[')) {
+        current = { index, title: text, kind: 'chapter', words: 0 };
+        out.push(current);
+      } else if (current && text) current.words += text.split(/\s+/).length;
+    }
+  });
+  return out;
+}

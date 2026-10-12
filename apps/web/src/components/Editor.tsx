@@ -7,11 +7,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ParagraphFlagsExt, ParagraphIds, flagsKey, type ParagraphFlags } from '@/lib/editor-extensions';
 import { useStudio } from '@/lib/store';
 import { LearnPattern } from './LearnPattern';
+import { Outline } from './Outline';
 
 const SAVE_DELAY_MS = 400;
 
 export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: string | null }) {
   const [learn, setLearn] = useState<{ example: string; context: string } | null>(null);
+  const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
+  const outlineOpen = useStudio((s) => s.outlineOpen);
+  const setOutlineOpen = useStudio((s) => s.setOutlineOpen);
   const doc = useStudio((s) => s.doc);
   const docVersion = useStudio((s) => s.docVersion);
   const setDoc = useStudio((s) => s.setDoc);
@@ -78,6 +82,9 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
   return (
     <section className="editor" aria-label="Manuscript">
       <div className="ed-bar">
+        <button className={`btn ol-toggle${outlineOpen ? ' on' : ''}`} aria-pressed={outlineOpen} title={outlineOpen ? 'Hide contents' : 'Show contents'} onClick={() => setOutlineOpen(!outlineOpen)}>
+          ☰ Contents
+        </button>
         <button className="btn" disabled={!editor} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>Chapter heading</button>
         <button
           className="btn"
@@ -105,8 +112,11 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
           Bracketed lines are system boxes. Shift+Enter for a new line inside one.
         </span>
       </div>
-      <div className="page">
-        <EditorContent editor={editor} />
+      <div className={`ed-body${outlineOpen ? ' with-outline' : ''}`}>
+        {outlineOpen && <Outline scroller={pageEl} />}
+        <div className="page" ref={setPageEl}>
+          <EditorContent editor={editor} />
+        </div>
       </div>
       {learn && <LearnPattern example={learn.example} context={learn.context} onClose={() => setLearn(null)} />}
     </section>
