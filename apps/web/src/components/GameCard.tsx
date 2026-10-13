@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- card art is a local blob: URL */
 
 import { cardable, draftCard, memoryCount, type CompendiumEntry, type GameCard, type WorldState } from '@questwright/engine';
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { PaintingPanel } from './Painting';
 import { saveCardImage, writeCards } from '@/lib/cards';
 import { iconKey, useImage } from '@/lib/illustrator';
@@ -10,55 +10,47 @@ import { useStudio } from '@/lib/store';
 
 const RARITY_LABEL: Record<GameCard['rarity'], string> = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', epic: 'Epic', legendary: 'Legendary', unique: 'Unique' };
 
-/** The card's art: the entry's icon, else its painting, else its initials. */
-function useCardArt(entryKey: string) {
+/** The card's art: the entry's painting when it has one (a full scene), else its icon, else nothing. */
+function useCardArt(entryKey: string): { url: string | null; icon: boolean } {
   const icon = useStudio((s) => s.project.illustrations?.[iconKey(entryKey)]?.approved);
   const painting = useStudio((s) => s.project.illustrations?.[entryKey]?.approved);
-  return useImage(icon ?? painting);
+  const url = useImage(painting ?? icon);
+  return { url, icon: !painting && Boolean(icon) };
 }
 
-/** A tabletop card: art, name banner, type line, stats, rules text and flavour, framed by kind and rarity. */
+/**
+ * A tabletop card that is mostly picture: the art fills the card, the name
+ * and cost ride a banner across the top, and a short panel at the bottom holds
+ * the type, a few stats and a few lines of what it does. The flavour line is
+ * the card's tooltip. Framed by kind and rarity.
+ */
 export function GameCardView({ entry, card, small, big }: { entry: CompendiumEntry; card: GameCard; small?: boolean; big?: boolean }) {
   const art = useCardArt(entry.key);
-  // Shrink the text until it fits the box, as a printed card would be typeset.
-  const box = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState(1);
-  useLayoutEffect(() => {
-    setFit(1);
-  }, [card, small]);
-  useLayoutEffect(() => {
-    const el = box.current;
-    if (el && el.scrollHeight > el.clientHeight + 1 && fit > 0.62) setFit((f) => Math.round((f - 0.06) * 100) / 100);
-  }, [fit, card, small]);
+  const flavor = card.flavor ? `${card.flavorBy ? `“${card.flavor.replace(/^["“]|["”]$/g, '')}” — ${card.flavorBy}` : card.flavor}` : undefined;
   return (
-    <div className={`gcard cat-${entry.category} r-${card.rarity}${small ? ' small' : ''}${big ? ' big' : ''}`} style={{ '--fit': fit } as React.CSSProperties}>
+    <div className={`gcard cat-${entry.category} r-${card.rarity}${small ? ' small' : ''}${big ? ' big' : ''}`} title={flavor}>
       <div className="gc-inner">
+        <div className={`gc-art${art.icon ? ' is-icon' : ''}`}>
+          {art.url ? <img src={art.url} alt="" /> : <span className="gc-ph">{card.title.split(/\s+/).map((w) => w[0]).join('').slice(0, 2)}</span>}
+        </div>
         <div className="gc-head">
           <b className="gc-title">{card.title}</b>
           {card.cost && <span className="gc-cost" title="Cost">{card.cost}</span>}
         </div>
-        <div className="gc-art">{art ? <img src={art} alt="" /> : <span className="gc-ph">{card.title.split(/\s+/).map((w) => w[0]).join('').slice(0, 2)}</span>}</div>
-        <div className="gc-type">
-          <span>{card.typeLine}</span>
-          <span className="gc-rarity" title={RARITY_LABEL[card.rarity]}>◆</span>
-        </div>
-        <div className="gc-box" ref={box}>
+        <div className="gc-panel">
+          <div className="gc-type">
+            <span>{card.typeLine}</span>
+            <span className="gc-rarity">{RARITY_LABEL[card.rarity]}</span>
+          </div>
           {card.stats.length > 0 && (
             <div className="gc-stats">
-              {card.stats.map((s) => (
-                <span key={s.label}><small>{s.label}</small>{s.value}</span>
+              {card.stats.slice(0, 3).map((s) => (
+                <span key={s.label}><small>{s.label}</small> {s.value}</span>
               ))}
             </div>
           )}
           <p className="gc-text">{card.text}</p>
-          {card.flavor && (
-            <p className="gc-flavor">
-              {card.flavorBy ? `“${card.flavor.replace(/^["“]|["”]$/g, '')}”` : card.flavor}
-              {card.flavorBy && <span> — {card.flavorBy}</span>}
-            </p>
-          )}
         </div>
-        <div className="gc-foot">{RARITY_LABEL[card.rarity]}</div>
       </div>
     </div>
   );
