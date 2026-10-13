@@ -70,3 +70,42 @@ export function cardFromDraft(d: CardDraft, from: number): GameCard {
 
 /** Entries that make good cards. */
 export const cardable = (e: CompendiumEntry) => e.category === 'spell' || e.category === 'magic' || e.category === 'item';
+
+const KIND_LINE: Partial<Record<CompendiumEntry['category'], string>> = { spell: 'Skill', magic: 'Magic system', item: 'Item' };
+const RARITIES: GameCard['rarity'][] = ['unique', 'legendary', 'epic', 'rare', 'uncommon', 'common'];
+
+/**
+ * A card drafted straight from what the book says, before Claude writes one:
+ * the first description as rules text, "(Cost: 1 Qi, Cooldown: 30 minutes)"
+ * style details as cost and stats, a rarity from its traits, and a line said
+ * about it (or another fact) as flavour.
+ */
+export function draftCard(e: CompendiumEntry): GameCard {
+  const facts = e.facts.map((f) => f.fact);
+  const stats: GameCard['stats'] = [];
+  let cost: string | undefined;
+  const clean = (s: string) =>
+    s.replace(/\(([^()]*:[^()]*)\)/g, (_, inner: string) => {
+      for (const part of inner.split(/[,;]/)) {
+        const m = /^\s*([A-Za-z][\w ]{1,20}?)\s*:\s*(.+?)\s*\.?\s*$/.exec(part);
+        if (!m) continue;
+        if (/^cost$/i.test(m[1]!)) cost ??= m[2]!.replace(/\s*Cost$/i, '');
+        else if (stats.length < 4) stats.push({ label: m[1]!.trim(), value: m[2]!.trim() });
+      }
+      return '';
+    }).replace(/\s+([.,])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+  const lines = facts.map(clean).filter(Boolean);
+  const traits = e.traits.map((t) => t.text.toLowerCase());
+  const said = e.said[0];
+  return {
+    title: e.name,
+    typeLine: KIND_LINE[e.category] ?? 'Lore',
+    rarity: RARITIES.find((r) => traits.includes(r)) ?? 'common',
+    ...(cost ? { cost } : {}),
+    stats,
+    text: lines[0] ?? 'The story has not said what it does yet.',
+    flavor: said ? said.text : lines[1] ?? '',
+    ...(said?.speaker ? { flavorBy: said.speaker } : {}),
+    from: 0,
+  };
+}

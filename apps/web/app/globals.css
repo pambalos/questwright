@@ -806,3 +806,17 @@ button.pill.painter:hover { border-color: var(--gold); }
 .gcard .gc-stats span { font-size: calc(10.5px * var(--fit, 1)); }
 .gcard.small .gc-text { font-size: calc(9px * var(--fit, 1)); }
 .gcard.small .gc-stats span { font-size: calc(8.5px * var(--fit, 1)); }
+/* A card front and centre on its codex page */
+.card-stage { flex: 1; width: 100%; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.cs-table { flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 50%, rgba(255,240,210,.08), transparent 65%); }
+.cs-table > div { width: min(340px, 90%); }
+.gcard.big { width: 100%; padding: 11px; border-radius: 16px; box-shadow: 0 18px 50px rgba(0,0,0,.65), 0 0 40px var(--glow), inset 0 0 0 1px rgba(255,255,255,.2); }
+.gcard.big .gc-title { font-size: 19px; }
+.gcard.big .gc-type { font-size: 12.5px; }
+.gcard.big .gc-text { font-size: calc(13.5px * var(--fit, 1)); }
+.gcard.big .gc-flavor { font-size: calc(12px * var(--fit, 1)); }
+.gcard.big .gc-stats span { font-size: calc(11.5px * var(--fit, 1)); }
+.cs-writing { animation: ptpulse 1.4s ease-in-out infinite; }
+.cs-note { margin: 0; font-size: 12px; }
+.codex-screen.docked .card-stage { flex: none; }
+.codex-screen.docked .cs-table { padding: 8px 0; }

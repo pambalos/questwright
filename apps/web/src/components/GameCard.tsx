@@ -1,8 +1,9 @@
 'use client';
 /* eslint-disable @next/next/no-img-element -- card art is a local blob: URL */
 
-import { cardable, memoryCount, type CompendiumEntry, type GameCard } from '@questwright/engine';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { cardable, draftCard, memoryCount, type CompendiumEntry, type GameCard, type WorldState } from '@questwright/engine';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { PaintingPanel } from './Painting';
 import { saveCardImage, writeCards } from '@/lib/cards';
 import { iconKey, useImage } from '@/lib/illustrator';
 import { useStudio } from '@/lib/store';
@@ -17,7 +18,7 @@ function useCardArt(entryKey: string) {
 }
 
 /** A tabletop card: art, name banner, type line, stats, rules text and flavour, framed by kind and rarity. */
-export function GameCardView({ entry, card, small }: { entry: CompendiumEntry; card: GameCard; small?: boolean }) {
+export function GameCardView({ entry, card, small, big }: { entry: CompendiumEntry; card: GameCard; small?: boolean; big?: boolean }) {
   const art = useCardArt(entry.key);
   // Shrink the text until it fits the box, as a printed card would be typeset.
   const box = useRef<HTMLDivElement>(null);
@@ -30,7 +31,7 @@ export function GameCardView({ entry, card, small }: { entry: CompendiumEntry; c
     if (el && el.scrollHeight > el.clientHeight + 1 && fit > 0.62) setFit((f) => Math.round((f - 0.06) * 100) / 100);
   }, [fit, card, small]);
   return (
-    <div className={`gcard cat-${entry.category} r-${card.rarity}${small ? ' small' : ''}`} style={{ '--fit': fit } as React.CSSProperties}>
+    <div className={`gcard cat-${entry.category} r-${card.rarity}${small ? ' small' : ''}${big ? ' big' : ''}`} style={{ '--fit': fit } as React.CSSProperties}>
       <div className="gc-inner">
         <div className="gc-head">
           <b className="gc-title">{card.title}</b>
@@ -63,50 +64,62 @@ export function GameCardView({ entry, card, small }: { entry: CompendiumEntry; c
   );
 }
 
-/** A codex page's card: shown when written, with buttons to write, rewrite, save and remove it. */
-export function CardPanel({ entry }: { entry: CompendiumEntry }) {
+/**
+ * The middle of a codex page for a skill, spell, magic system or item: its
+ * card, front and centre (a draft from the book's facts until Claude writes
+ * one), with the card's buttons, and a switch to its painting when it has one.
+ */
+export function CardStage({ entry, state, figure }: { entry: CompendiumEntry; state: WorldState; figure: ReactNode }) {
   const card = useStudio((s) => s.project.cards?.[entry.key]);
+  const hasPainting = useStudio((s) => Boolean(s.project.illustrations?.[entry.key]?.versions.length));
   const writing = useStudio((s) => s.writingCards.includes(entry.key));
   const aiStatus = useStudio((s) => s.aiStatus);
   const setCard = useStudio((s) => s.setCard);
-  const ref = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<'card' | 'painting'>('card');
   const [saving, setSaving] = useState(false);
-  if (!cardable(entry)) return null;
+  const ref = useRef<HTMLDivElement>(null);
+  const shown = card ?? draftCard(entry);
   const fresh = card ? memoryCount(entry) - card.from : 0;
-  return (
-    <div className="card-panel">
-      <h4>Card</h4>
-      {card ? (
-        <div ref={ref} className="card-shot">
-          <GameCardView entry={entry} card={card} />
-        </div>
-      ) : (
-        <p className="cx-muted">{writing ? 'Writing the card…' : 'No card yet. Claude writes one from what the book says about it.'}</p>
-      )}
-      <div className="row-btns">
-        {aiStatus === 'on' && (
-          <button disabled={writing} onClick={() => void writeCards([entry.key])}>
-            {writing ? 'Writing…' : card ? (fresh > 0 ? `Rewrite · ${fresh} new` : 'Rewrite') : 'Make card'}
-          </button>
-        )}
-        {card && (
-          <button
-            disabled={saving}
-            onClick={async () => {
-              if (!ref.current) return;
-              setSaving(true);
-              try {
-                await saveCardImage(ref.current.firstElementChild as HTMLElement, card.title);
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {saving ? 'Saving…' : 'Save image'}
-          </button>
-        )}
-        {card && <button onClick={() => setCard(entry.key, null)}>Remove</button>}
+
+  if (view === 'painting')
+    return (
+      <div className="card-stage">
+        <PaintingPanel entry={entry} state={state} figure={figure} />
+        <div className="pt-bar"><button className="mini" onClick={() => setView('card')}>Show card</button></div>
       </div>
+    );
+  return (
+    <div className="card-stage">
+      <div className="cs-table">
+        <div ref={ref} className={writing ? 'cs-writing' : ''}>
+          <GameCardView entry={entry} card={shown} big />
+        </div>
+      </div>
+      <div className="pt-bar">
+        {aiStatus === 'on' && (
+          <button className="pt-paint" disabled={writing} onClick={() => void writeCards([entry.key])}>
+            {writing ? 'Writing…' : card ? (fresh > 0 ? `Rewrite · ${fresh} new` : 'Rewrite card') : 'Make card'}
+          </button>
+        )}
+        <button
+          className="mini"
+          disabled={saving}
+          onClick={async () => {
+            if (!ref.current) return;
+            setSaving(true);
+            try {
+              await saveCardImage(ref.current.firstElementChild as HTMLElement, shown.title);
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          {saving ? 'Saving…' : 'Save image'}
+        </button>
+        {card && <button className="mini" onClick={() => setCard(entry.key, null)}>Remove</button>}
+        <button className="mini" onClick={() => setView('painting')}>{hasPainting ? 'Show painting' : 'Painting'}</button>
+      </div>
+      {!card && <p className="cx-muted cs-note">Drafted from what the book says. Make card for one written by Claude.</p>}
     </div>
   );
 }

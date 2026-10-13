@@ -1,6 +1,6 @@
 'use client';
 
-import { codexPrompt, label, memoryCount, type CompendiumEntry, type LoreCategory, type PlacedParagraph, type WorldState } from '@questwright/engine';
+import { codexPrompt, label, memoryCount, type CompendiumEntry, type LoreCategory, type PlacedParagraph, type WorldState, cardable } from '@questwright/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { Figure2D } from '@/figure/Figure2D';
 import { gearFor } from '@/figure/gear';
@@ -12,7 +12,7 @@ import { useStudio } from '@/lib/store';
 import { LoreFacts, LoreNote } from './Compendium';
 import { Painted, PaintingPanel } from './Painting';
 import { IconRow } from './SkillIcon';
-import { CardDeck, CardPanel } from './GameCard';
+import { CardDeck, CardStage } from './GameCard';
 
 const BOOKS: { key: LoreCategory; title: string }[] = [
   { key: 'character', title: 'Characters' },
@@ -206,6 +206,9 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
         <section className="cx-portrait" aria-label="Portrait">
           {entry && (
             <>
+              {cardable(entry) ? (
+                <CardStage key={entry.key} entry={entry} state={state} figure={<div className="cx-emblem"><Emblem category={entry.category} size={220} /></div>} />
+              ) : (
               <PaintingPanel
                 key={entry.key}
                 entry={entry}
@@ -220,6 +223,7 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
                   )
                 }
               />
+              )}
               {(entry.category === 'spell' || entry.category === 'magic' || entry.category === 'item') && (
                 <IconRow key={`icon-${entry.key}`} entryKey={entry.key} name={entry.name} label={entry.category === 'item' ? 'Item icon' : 'Ability icon'} />
               )}
@@ -258,7 +262,6 @@ export function Codex({ state, flat, docked }: { state: WorldState; flat: Placed
                 )}
                 {!page && paragraphs.length > 0 && <span className="cx-muted">Drafted from the facts so far.</span>}
               </div>
-              <CardPanel key={`card-${entry.key}`} entry={entry} />
               {entry.traits.length > 0 && (
                 <div className="cx-section">
                   <h4>Traits</h4>
