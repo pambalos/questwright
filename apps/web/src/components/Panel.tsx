@@ -9,6 +9,7 @@ import { useStudio } from '@/lib/store';
 import { CharacterSheet } from './CharacterSheet';
 import { Compendium } from './Compendium';
 import { Roster } from './Roster';
+import { Story } from './Story';
 import { WorldTab } from './WorldTab';
 
 interface Props {
@@ -58,6 +59,9 @@ export function Panel({ view, latest, flat, viewIndex }: Props) {
         <button role="tab" aria-selected={tab === 'world'} className={`tab${tab === 'world' ? ' on' : ''}`} onClick={() => setTab('world')}>
           World
         </button>
+        <button role="tab" aria-selected={tab === 'story'} className={`tab${tab === 'story' ? ' on' : ''}`} onClick={() => setTab('story')} title="The story so far: chapter summaries, plot threads and events">
+          Story
+        </button>
         <div className="panel-modes" role="group" aria-label="Panel size">
           <button className="mode-btn" title="Minimise to icons (Ctrl+\)" aria-label="Minimise the panel" onClick={() => setMode('mini')}>
             <Icon name="minimise" />
@@ -87,6 +91,8 @@ export function Panel({ view, latest, flat, viewIndex }: Props) {
           <Compendium state={view} flat={flat} onJump={jump} />
         ) : tab === 'world' ? (
           <WorldTab world={view.world} flat={flat} onJump={jump} />
+        ) : tab === 'story' ? (
+          <Story latest={latest} flat={flat} viewIndex={viewIndex} onJump={jump} />
         ) : sheet?.promoted ? (
           <CharacterSheet sheet={sheet} world={view.world} compendium={view.compendium} warnings={view.warnings} flat={flat} atPid={at?.id ?? null} onJump={jump} />
         ) : (
@@ -171,6 +177,7 @@ const ICONS = {
   expand: 'M15 6l-6 6 6 6',
   roster: 'M8 11a3 3 0 100-6 3 3 0 000 6zM2 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 11a3 3 0 100-6M18 14c2.4.7 4 3 4 6',
   compendium: 'M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3zM5 17a3 3 0 013-3h11M9 8h6',
+  story: 'M4 5c3-1 5.5-1 8 1 2.5-2 5-2 8-1v14c-3-1-5.5-1-8 1-2.5-2-5-2-8-1zM12 6v14',
   world: 'M12 21a9 9 0 100-18 9 9 0 000 18zM3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z',
 } as const;
 
@@ -222,6 +229,7 @@ function MiniBar({ tabs, latest }: { tabs: string[]; latest: WorldState }) {
         {button('roster', 'Roster', <Icon name="roster" />)}
         {button('compendium', `Compendium · ${latest.compendium.length}`, <Icon name="compendium" />)}
         {button('world', 'World', <Icon name="world" />)}
+        {button('story', 'Story', <Icon name="story" />)}
       </div>
       <Toasts />
     </aside>

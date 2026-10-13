@@ -19,7 +19,9 @@ import {
   type ArtStyle,
   type ArtStyleKey,
   type Extraction,
+  type ChapterStory,
   type GameCard,
+  type Narrative,
   type Illustration,
   type LearnedPattern,
   type Look,
@@ -203,6 +205,11 @@ export interface StudioState extends Persisted {
   addLore(items: { pid: string; text: string; finds: Pick<Extraction, 'lore' | 'relations'> }[]): number;
   markLoreRead(key: string, hash: string): void;
   setCard(key: string, card: GameCard | null): void;
+  /** Chapter summaries being written, or null. `added` counts chapters summarised. */
+  storyPass: LorePassState | null;
+  setStoryPass(p: LorePassState | null): void;
+  setChapterStory(key: string, story: ChapterStory | null): void;
+  setSofar(sofar: Narrative['sofar'] | null): void;
   /** Entry keys whose cards are being written now (or waiting). */
   writingCards: string[];
   setWritingCards(keys: string[]): void;
@@ -362,6 +369,7 @@ export const useStudio = create<StudioState>()(
         showGear: true,
         outlineOpen: true,
         lorePass: null,
+        storyPass: null,
         writingCards: [],
         images: { provider: 'gemini', quality: 'final', auto: false, monthlyCap: 10 },
         imageSpend: { month: thisMonth(), usd: 0 },
@@ -510,6 +518,22 @@ export const useStudio = create<StudioState>()(
           if (card) cards[key] = card;
           else delete cards[key];
           set({ project: { ...p, cards } });
+        },
+        setStoryPass(storyPass) {
+          set({ storyPass });
+        },
+        setChapterStory(key, story) {
+          const p = get().project;
+          const chapters = { ...p.narrative?.chapters };
+          if (story) chapters[key] = story;
+          else delete chapters[key];
+          set({ project: { ...p, narrative: { ...p.narrative, chapters } } });
+        },
+        setSofar(sofar) {
+          const p = get().project;
+          const narrative: Narrative = { chapters: p.narrative?.chapters ?? {} };
+          if (sofar) narrative.sofar = sofar;
+          set({ project: { ...p, narrative } });
         },
         markLoreRead(key, hash) {
           const p = get().project;

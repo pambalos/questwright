@@ -12,6 +12,8 @@ export * from './art';
 export * from './patterns';
 export * from './lorepass';
 export * from './cards';
+export * from './boxes';
+export * from './narrative';
 
 import type { Project } from './types';
 

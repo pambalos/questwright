@@ -10,12 +10,14 @@ import { useStudio } from '@/lib/store';
 import { LearnPattern } from './LearnPattern';
 import { FormatBar } from './FormatBar';
 import { Outline } from './Outline';
+import { InsertBox, type BoxKind } from './InsertBox';
 
 const SAVE_DELAY_MS = 400;
 
 export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: string | null }) {
   const [learn, setLearn] = useState<{ example: string; context: string } | null>(null);
   const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
+  const [insert, setInsert] = useState<BoxKind | null>(null);
   const outlineOpen = useStudio((s) => s.outlineOpen);
   const setOutlineOpen = useStudio((s) => s.setOutlineOpen);
   const doc = useStudio((s) => s.doc);
@@ -110,6 +112,15 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
         >
           Learn pattern
         </button>
+        <span className="ed-mem" role="group" aria-label="Insert from memory">
+          <span>From memory:</span>
+          <button className="btn" disabled={!editor} title="Insert a character's status screen as the book has it at the cursor" onClick={() => setInsert('sheet')}>
+            Character sheet
+          </button>
+          <button className="btn" disabled={!editor} title="Insert the system's description of a skill, spell or item" onClick={() => setInsert('entry')}>
+            Skill or item
+          </button>
+        </span>
         {archived > 0 && <span className="hint">{archived} earlier book{archived > 1 ? 's are' : ' is'} archived read-only; their system boxes still count.</span>}
       </div>
       <div className={`ed-body${outlineOpen ? ' with-outline' : ''}`}>
@@ -118,6 +129,7 @@ export function Editor({ latest, viewPid }: { latest: WorldState; viewPid: strin
           <EditorContent editor={editor} />
         </div>
       </div>
+      {insert && editor && <InsertBox editor={editor} kind={insert} onClose={() => setInsert(null)} />}
       {learn && <LearnPattern example={learn.example} context={learn.context} onClose={() => setLearn(null)} />}
     </section>
   );

@@ -35,7 +35,7 @@ function systemLines(text: string): string[] {
 }
 
 /** Bumped when the parser learns something new, so every paragraph is read again. */
-export const PARSER_VERSION = 3;
+export const PARSER_VERSION = 4;
 
 const RARITIES = 'Common|Uncommon|Rare|Epic|Legendary|Mythic|Unique|Artifact|Divine';
 /** "[Tactical Insight (Common)]: Grants a temporary boost…": a system description of a skill, item or title. */
@@ -82,6 +82,12 @@ export function parseParagraph(text: string, ctx: ParseContext = {}): ParsedChan
 
   for (const line of lines) {
     const push = (change: Change) => out.push({ change, quote: line });
+    // A status screen names whose it is: "Name: Kael". The lines after it are about them.
+    const named = isSystemBox(text) ? /^\[?\s*Name\s*:\s*([A-Z][\w'-]*(?: [A-Z][\w'-]*){0,3})\s*\]?$/.exec(line) : null;
+    if (named) {
+      boxSubject = named[1];
+      continue;
+    }
     const prefix = /^\[?\s*([A-Z][\w'-]*(?: [A-Z][\w'-]*)?)\s*·/.exec(line);
     const lead = prefix?.[1];
     const startsWithRule = lead && /^(Level|Party|Status|Skill|Title|Class|Item|Equipped|Blessing|Path|Magic|Discipline|School)\b/.test(lead);

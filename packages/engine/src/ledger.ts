@@ -121,6 +121,9 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
         e = entry(loreKey(c.subject), c.subject.trim(), c.category, p.id);
       }
       const at = { at: p.id, recordId: r.id };
+      // The same words twice (a description box repeated later) are one memory.
+      const same = (x: string) => x.trim().toLowerCase() === c.fact.trim().toLowerCase();
+      if (c.lore !== 'said' && (c.lore === 'trait' ? e.traits.some((t) => same(t.text)) : e.facts.some((f) => same(f.fact)))) continue;
       if (c.lore === 'trait') e.traits.push({ text: c.fact, ...at });
       else if (c.lore === 'said') e.said.push({ text: c.fact, ...(c.speaker ? { speaker: c.speaker } : {}), ...at });
       else {

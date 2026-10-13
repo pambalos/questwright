@@ -1,6 +1,7 @@
 import type { ArtStyleKey, IllustrationSet } from './art';
 import type { LearnedPattern } from './patterns';
 import type { GameCard } from './cards';
+import type { Narrative } from './narrative';
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
@@ -145,6 +146,8 @@ export interface Project {
   loreRead?: Record<string, string>;
   /** Tabletop cards for skills, spells, magic systems and items, by entry key. */
   cards?: Record<string, GameCard>;
+  /** The story so far: chapter summaries, plot threads and a synopsis. */
+  narrative?: Narrative;
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';

@@ -1,6 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import {
+  ChapterStorySchema,
+  NARRATIVE_SYSTEM,
+  narrativePrompt,
+  RESTYLE_SYSTEM,
+  RestyleSchema,
+  restylePrompt,
+  SOFAR_SYSTEM,
+  SofarSchema,
+  sofarPrompt,
   CARD_SYSTEM,
   CardSchema,
   LORE_PASS_SYSTEM,
@@ -98,6 +107,19 @@ const LoreBody = z.object({
   compendium: z.array(short).max(2000),
   memory: z.array(z.string().max(1200)).max(40),
 });
+/** The story so far: one chapter's summary, beats and plot threads. */
+const StoryBody = z.object({
+  mode: z.literal('story'),
+  chapter: short,
+  paragraphs: z.array(z.string().min(1).max(12000)).min(1).max(1500),
+  previously: z.array(z.string().max(3000)).max(5),
+  threads: z.array(short).max(200),
+  memory: z.array(z.string().max(1200)).max(40),
+});
+/** The synopsis of the book, from its chapter summaries. */
+const SofarBody = z.object({ mode: z.literal('sofar'), chapters: z.array(z.object({ title: short, summary: z.string().max(3000) })).min(1).max(1000) });
+/** A system box from memory, rewritten in the book's own style. */
+const RestyleBody = z.object({ mode: z.literal('restyle'), box: z.string().min(3).max(6000), examples: z.array(z.string().max(3000)).min(1).max(6) });
 const PatternBody = z.object({ mode: z.literal('pattern'), example: z.string().min(3).max(4000), context: z.string().max(12000).optional() });
 
 const fail = (status: number, error: string) => NextResponse.json({ error }, { status });
@@ -165,6 +187,25 @@ export async function POST(req: Request) {
     if (lore.data.paragraphs.reduce((n, p) => n + p.length, 0) > 60000) return fail(400, 'That stretch is too long for one request.');
     // Read with more care than paragraph reading: the point of this pass is to miss less.
     const r = await ask({ system: LORE_PASS_SYSTEM, prompt: lorePassPrompt(lore.data), schema: LorePassSchema, what: 'chapter', effort: 'medium' });
+    return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
+  }
+
+  const story = StoryBody.safeParse(json);
+  if (story.success) {
+    if (story.data.paragraphs.reduce((n, p) => n + p.length, 0) > 200000) return fail(400, 'That chapter is too long for one request.');
+    const r = await ask({ system: NARRATIVE_SYSTEM, prompt: narrativePrompt(story.data), schema: ChapterStorySchema, what: 'chapter' });
+    return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
+  }
+
+  const sofar = SofarBody.safeParse(json);
+  if (sofar.success) {
+    const r = await ask({ system: SOFAR_SYSTEM, prompt: sofarPrompt(sofar.data.chapters), schema: SofarSchema, what: 'passage' });
+    return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
+  }
+
+  const restyle = RestyleBody.safeParse(json);
+  if (restyle.success) {
+    const r = await ask({ system: RESTYLE_SYSTEM, prompt: restylePrompt(restyle.data.box, restyle.data.examples), schema: RestyleSchema, what: 'passage' });
     return r instanceof Response ? r : NextResponse.json({ result: r.result, model: MODEL });
   }
 
