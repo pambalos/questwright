@@ -1,6 +1,23 @@
 import type { Chapter, Manuscript } from './types';
 
-const CHAPTER_LINE = /^(?:#{1,3}\s+.+|(?:chapter|ch\.)\s+[\w-]+\b.*|prologue\b.*|epilogue\b.*|interlude\b.*)$/i;
+/**
+ * A line that starts a chapter: "Chapter 3", "CHAPTER THREE: The Swamp", "Ch 17- The Hydra", "Prologue",
+ * "Side Story: …", "~ Chapter 4 ~", or a markdown heading. Decorative marks around it are allowed.
+ */
+const CHAPTER_LINE =
+  /^[\s~*=—–\-_#.]*(?:#{1,3}\s+.+|(?:chapter\b|chap\.|ch\.?(?=\s*\d))\s*[\w-]+\b.*|(?:prologue|epilogue|interlude|afterword|foreword|preface|side story|bonus chapter|extra chapter)\b.*)$/i;
+
+/** Whether a short line reads as a chapter marker rather than prose. */
+export function isChapterMarker(line: string): boolean {
+  const t = line.trim();
+  return t.length > 0 && t.length < 120 && !/[.!?]["”']?$/.test(t.replace(/\s*[~*=—–\-_]+$/, '')) && CHAPTER_LINE.test(t);
+}
+
+/** A line that starts a new book in a series: "Book 2", "Volume III: …". */
+export function isBookMarker(line: string): boolean {
+  const t = line.trim();
+  return t.length < 120 && /^[\s~*=—–\-_#]*(?:book|volume|vol\.)\s+[\w-]+\b/i.test(t);
+}
 
 /**
  * Splits a book's plain text into chapters and paragraphs. Chapters start at
@@ -34,7 +51,7 @@ export function splitBook(text: string, book: string, idPrefix: string): Chapter
   const boxContinuation = /^(\+\d|[-–]\d|welcome,|you have|class\b|level\b|[A-Z][\w'-]* ·|\w+ \d+ ·)/i;
   for (const raw of lines) {
     const line = raw.trim();
-    if (CHAPTER_LINE.test(line) && line.length < 120) {
+    if (isChapterMarker(line)) {
       flushChapter();
       title = line.replace(/^#+\s*/, '');
       continue;

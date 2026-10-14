@@ -1,3 +1,8 @@
+import type { ArtStyleKey, IllustrationSet } from './art';
+import type { LearnedPattern } from './patterns';
+import type { GameCard } from './cards';
+import type { Narrative } from './narrative';
+
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export interface Paragraph {
@@ -69,7 +74,9 @@ export type Change =
   /** The character takes up a magic system, discipline or path. */
   | { kind: 'magic'; character: string; system: string }
   /** A fact for the compendium: who someone is, where they come from, what a creature or place is. `character` is set when the subject is a character. */
-  | { kind: 'lore'; character?: string; subject: string; category: LoreCategory; fact: string }
+  | { kind: 'lore'; character?: string; subject: string; category: LoreCategory; fact: string; lore?: LoreKind; speaker?: string }
+  /** A lasting link between two entities: "Lyra" "is the sister of" "Kael". Ids are set where an end is a character. */
+  | { kind: 'relation'; subject: string; object: string; relation: string; subjectId?: string; objectId?: string }
   | { kind: 'item'; character: string; item: string; delta: number; set?: number; rarity?: Rarity }
   | { kind: 'equip'; character: string; slot: string; item: string; rarity?: Rarity }
   | { kind: 'unequip'; character: string; slot: string }
@@ -79,7 +86,10 @@ export type Change =
 
 export type ChangeKind = Change['kind'];
 
-export const LORE_CATEGORIES = ['character', 'creature', 'place', 'faction', 'item', 'other'] as const;
+export const LORE_CATEGORIES = ['character', 'creature', 'place', 'faction', 'item', 'spell', 'magic', 'other'] as const;
+/** A fact (backstory, what something is), a trait (a short descriptor), or something said (a quote, with its speaker). */
+export const LORE_KINDS = ['fact', 'trait', 'said'] as const;
+export type LoreKind = (typeof LORE_KINDS)[number];
 export type LoreCategory = (typeof LORE_CATEGORIES)[number];
 
 /** Where a change came from. Parser changes apply on their own; AI changes wait for the author. */
@@ -118,14 +128,31 @@ export interface Project {
   archive?: Manuscript;
   /** Chapters of archived books still waiting for a character skim. */
   skimPending?: string[];
-  art?: { style: ArtStyle };
+  /** How characters are drawn (palette and figure renderer), and the look paintings are made in. */
+  art?: { style: ArtStyle; render?: RenderStyle; paint?: ArtStyleKey };
   /** Author's word on which magic system a skill belongs to, and what it builds on. Wins over the AI's reading. */
   skillPaths?: Record<string, { system: string | null; requires?: string }>;
   /** The author's own notes on compendium entries, by entry key. */
   loreNotes?: Record<string, string>;
+  /** Codex entries written from memory (by the AI or the author), by entry key, with how many memories they were written from. */
+  codex?: Record<string, { text: string; from: number }>;
+  /** Painted illustrations, by entry key: every version, and the one the author approved. */
+  illustrations?: Record<string, IllustrationSet>;
+  /** Images (illustration ids) every new painting should match in style. */
+  styleRefs?: string[];
+  /** System message formats the author taught the parser. */
+  patterns?: LearnedPattern[];
+  /** Chapters the lore pass has read: first paragraph id → hash of the chapter's text when it was read. */
+  loreRead?: Record<string, string>;
+  /** Tabletop cards for skills, spells, magic systems and items, by entry key. */
+  cards?: Record<string, GameCard>;
+  /** The story so far: chapter summaries, plot threads and a synopsis. */
+  narrative?: Narrative;
 }
 
 export type ArtStyle = 'painterly' | 'ink' | 'ember';
+/** How characters are drawn: animated anime-style 3D, or still pen-and-ink illustrations like a printed book. */
+export type RenderStyle = 'anime' | 'storybook';
 
 
 export type PanelKey = 'stats' | 'equipment' | 'inventory' | 'skills' | 'currencies' | 'blessings' | 'titles';
@@ -145,7 +172,8 @@ export interface Sheet {
   /** What the story has revealed about the character, in order: their backstory as it unfolds. */
   lore: { fact: string; at: string; recordId: string }[];
   items: Record<string, { count: number; rarity?: Rarity }>;
-  equipment: Record<string, { item: string; rarity?: Rarity }>;
+  /** What is worn or held, by slot, with the paragraph where it was put on. */
+  equipment: Record<string, { item: string; rarity?: Rarity; at?: string }>;
   titles: string[];
   blessings: string[];
   blessingPoints: number;
@@ -197,4 +225,11 @@ export interface CompendiumEntry {
   /** Paragraph where it first appears. */
   firstAt: string;
   facts: { fact: string; at: string; recordId: string }[];
+  /** Short descriptors: looks, manner, temperament. */
+  traits: { text: string; at: string; recordId: string }[];
+  /** Things said about or by this entity. */
+  said: { text: string; speaker?: string; at: string; recordId: string }[];
+  /** Links to other entries, in both directions. */
+  relations: { key: string; name: string; relation: string; direction: 'out' | 'in'; at: string; recordId: string }[];
+  aliases: string[];
 }

@@ -2,6 +2,7 @@
 
 import { label, type MagicSystem, type PlacedParagraph, type Sheet } from '@questwright/engine';
 import { useId, useMemo, useState } from 'react';
+import { PaintIconsButton, useSkillIcons } from './SkillIcon';
 
 interface Props {
   system: MagicSystem;
@@ -124,6 +125,8 @@ export function TalentTree({ system, flat, onJump, sheet }: Props) {
           .filter(Boolean)
           .join(' · ');
   const act = (n: Node) => (n.hint || !n.at ? undefined : () => onJump(n.at!));
+  const known = all.filter((n) => !n.hint).map((n) => n.name);
+  const icons = useSkillIcons(known);
 
   const W = 360;
   const pad = 30;
@@ -135,6 +138,7 @@ export function TalentTree({ system, flat, onJump, sheet }: Props) {
         <span className="talents-count">
           {sheet ? `${learned} of ${system.skills.length} known ${system.skills.length === 1 ? 'star' : 'stars'}` : `${system.skills.length} ${system.skills.length === 1 ? 'skill' : 'skills'} seen`}
         </span>
+        <PaintIconsButton names={known} />
         <div className="seg-mini" role="group" aria-label="Tree view">
           <button className={view === 'constellation' ? 'on' : ''} aria-pressed={view === 'constellation'} onClick={() => setView('constellation')}>Constellation</button>
           <button className={view === 'talents' ? 'on' : ''} aria-pressed={view === 'talents'} onClick={() => setView('talents')}>Talents</button>
@@ -190,7 +194,13 @@ export function TalentTree({ system, flat, onJump, sheet }: Props) {
               onKeyDown={onClick ? (e) => (e.key === 'Enter' || e.key === ' ') && onClick() : undefined}>
               <title>{tip(n)}</title>
               {n.lit && <circle r="11" fill={tint} opacity="0.55" filter={`url(#${uid}-glow)`} />}
-              {n.lit ? (
+              {n.lit && icons[n.name] ? (
+                <>
+                  <clipPath id={`${uid}-s-${n.col}-${n.depth}`}><circle r="10" /></clipPath>
+                  <image href={icons[n.name]} x="-10" y="-10" width="20" height="20" clipPath={`url(#${uid}-s-${n.col}-${n.depth})`} preserveAspectRatio="xMidYMid slice" />
+                  <circle r="10" fill="none" stroke="#fff" strokeOpacity="0.85" strokeWidth="1.2" />
+                </>
+              ) : n.lit ? (
                 <>
                   <path d="M0 -9 L1.6 -1.6 L9 0 L1.6 1.6 L0 9 L-1.6 1.6 L-9 0 L-1.6 -1.6 Z" fill="#fff" opacity="0.9" />
                   <circle r="3.4" fill="#fff" />
@@ -260,7 +270,15 @@ export function TalentTree({ system, flat, onJump, sheet }: Props) {
               <rect x={-tile / 2} y={-tile / 2} width={tile} height={tile} rx="7"
                 fill={n.lit ? `url(#${uid}-tile)` : '#161a26'} stroke={n.lit ? tint : n.hint ? '#3a4058' : '#5a6380'}
                 strokeWidth={n.lit ? 2 : 1.2} strokeDasharray={n.hint ? '3 3' : undefined} />
-              <text y="5" textAnchor="middle" className={n.hint ? 'tile-q' : 'tile-i'}>{n.hint ? '?' : initials(n.name)}</text>
+              {icons[n.name] && !n.hint ? (
+                <>
+                  <clipPath id={`${uid}-c-${n.col}-${n.depth}`}><rect x={-tile / 2 + 2} y={-tile / 2 + 2} width={tile - 4} height={tile - 4} rx="5" /></clipPath>
+                  <image href={icons[n.name]} x={-tile / 2 + 2} y={-tile / 2 + 2} width={tile - 4} height={tile - 4} clipPath={`url(#${uid}-c-${n.col}-${n.depth})`}
+                    opacity={n.lit ? 1 : 0.45} preserveAspectRatio="xMidYMid slice" />
+                </>
+              ) : (
+                <text y="5" textAnchor="middle" className={n.hint ? 'tile-q' : 'tile-i'}>{n.hint ? '?' : initials(n.name)}</text>
+              )}
               {n.lit && n.level !== undefined && (
                 <g transform={`translate(${tile / 2 - 3} ${tile / 2 - 3})`}>
                   <rect x="-10" y="-8" width="20" height="14" rx="4" fill="#0c0e15" stroke={tint} />

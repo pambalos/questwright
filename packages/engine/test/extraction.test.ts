@@ -12,7 +12,7 @@ const reading: Extraction = {
     { kind: 'equip', character: 'Kael', name: 'Iron Dagger', amount: null, slot: 'Belt', rarity: null, system: null, requires: null, quote: 'slid the dagger into his belt' },
     { kind: 'gain_currency', character: 'he', name: 'Gold', amount: 20, slot: null, rarity: null, system: null, requires: null, quote: 'twenty gold' },
   ],
-  lore: [],
+  lore: [], relations: [],
 };
 
 describe('AI extraction contract', () => {
@@ -28,20 +28,20 @@ describe('AI extraction contract', () => {
     expect(fold(project, SAMPLE).sheets.kael!.equipment).toEqual({});
     const claimed = { ...project, records: project.records.map((r) => (r.status === 'proposed' ? { ...r, status: 'applied' as const } : r)) };
     const s = fold(claimed, SAMPLE).sheets.kael!;
-    expect(s.equipment).toEqual({ Belt: { item: 'Iron Dagger', rarity: undefined } });
+    expect(s.equipment).toEqual({ Belt: { item: 'Iron Dagger', rarity: undefined, at: 'p4' } });
     expect(s.currencies.Gold).toBe(20);
   });
 
   it('adds new characters and proposes a merge when the text reveals an identity', () => {
     const base = parsedProject(SAMPLE).project;
     const withStranger = applyExtraction(base, 'p7', SAMPLE.chapters[0]!.paragraphs[6]!.text, {
-      characters: [{ name: 'Hooded stranger', role: null, description: 'Watched Kael from the treeline.', sameAs: null, look: { outfit: 'cloak', hair: 'hood', hairColor: null, clothColor: 'not a colour' } }], changes: [], lore: [],
+      characters: [{ name: 'Hooded stranger', role: null, description: 'Watched Kael from the treeline.', sameAs: null, look: { outfit: 'cloak', hair: 'hood', hairColor: null, clothColor: 'not a colour' } }], changes: [], lore: [], relations: [],
     }, ids()).project;
     expect(withStranger.characters['hooded-stranger']?.description).toBe('Watched Kael from the treeline.');
     expect(withStranger.characters['hooded-stranger']?.lookHints).toEqual({ outfit: 'cloak', hair: 'hood' });
     const p11 = SAMPLE.chapters[1]!.paragraphs[3]!;
     const { project } = applyExtraction(withStranger, 'p11', p11.text, {
-      characters: [{ name: 'Hooded stranger', role: null, description: null, sameAs: 'Lyra', look: null }], changes: [], lore: [],
+      characters: [{ name: 'Hooded stranger', role: null, description: null, sameAs: 'Lyra', look: null }], changes: [], lore: [], relations: [],
     }, ids());
     expect(project.records.find((r) => r.change.kind === 'merge')).toMatchObject({ status: 'proposed', change: { from: 'hooded-stranger', into: 'lyra' } });
   });
@@ -50,7 +50,7 @@ describe('AI extraction contract', () => {
     const base = parsedProject(SAMPLE).project;
     const p5 = SAMPLE.chapters[0]!.paragraphs[4]!;
     const { proposals } = applyExtraction(base, 'p5', p5.text, {
-      characters: [], changes: [{ kind: 'skill', character: 'Kael', name: 'Flame Ward', amount: 1, slot: null, rarity: null, system: null, requires: null, quote: 'Flame Ward' }], lore: [],
+      characters: [], changes: [{ kind: 'skill', character: 'Kael', name: 'Flame Ward', amount: 1, slot: null, rarity: null, system: null, requires: null, quote: 'Flame Ward' }], lore: [], relations: [],
     }, ids());
     expect(proposals).toBe(0);
   });
@@ -86,9 +86,9 @@ describe('batch reading', () => {
     const result = BatchExtractionSchema.parse({ paragraphs: [{ n: 2, ...reading }, { n: 9, ...reading }] });
     const split = splitBatch(result, 3);
     expect(split).toHaveLength(3);
-    expect(split[0]).toEqual({ characters: [], changes: [], lore: [] });
+    expect(split[0]).toEqual({ characters: [], changes: [], lore: [], relations: [] });
     expect(split[1]).toEqual(reading);
-    expect(split[2]).toEqual({ characters: [], changes: [], lore: [] });
+    expect(split[2]).toEqual({ characters: [], changes: [], lore: [], relations: [] });
   });
 });
 

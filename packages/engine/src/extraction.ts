@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { hashText } from './manuscript';
 import { addCharacter, canonical, findByName, resolveDrafts } from './registry';
-import { LORE_CATEGORIES, type Change, type ChangeRecord, type Project, type Sheet, type WorldDefs } from './types';
+import { LORE_CATEGORIES, LORE_KINDS, type Change, type ChangeRecord, type Project, type Sheet, type WorldDefs } from './types';
 
 /**
  * Tier 2: the contract between the app and the model that reads prose.
@@ -59,7 +59,17 @@ export const ExtractionSchema = z.object({
     z.object({
       subject: z.string(),
       category: z.enum(LORE_CATEGORIES),
+      kind: z.enum(LORE_KINDS),
       fact: z.string(),
+      speaker: z.string().nullable(),
+      quote: z.string(),
+    }),
+  ),
+  relations: z.array(
+    z.object({
+      subject: z.string(),
+      relation: z.string(),
+      object: z.string(),
       quote: z.string(),
     }),
   ),
@@ -83,13 +93,20 @@ const EXTRACTION_RULES = `Rules:
 - Attribute each change to the character it happens to. Use the known name or alias when the paragraph refers to a known character, including by pronoun when the previous paragraph makes the referent clear.
 - Reuse names from the world definitions when they mean the same thing, so "gold coins" becomes "Gold" and a known skill keeps its exact name.
 - amount: for items and currency, a positive count; for stat_change, the signed change. Use null when it does not apply.
-- equip: name is the item, slot is a short slot name such as Main hand, Off hand, Head, Chest, Belt, Ring, Back. Equipping something already carried is only an equip.
+- equip: name is the item as the story names it (keep its material: "Obsidian chestplate", not "chestplate"). slot is one of Main hand, Off hand, Head, Chest, Shoulders, Arms, Hands, Legs, Feet, Back, Belt, Neck, Ring; another name only for a place none of these covers. Equipping something already carried is only an equip; picking something up and putting it on at once is an item and an equip.
+- unequip: name null, slot the slot emptied. When gear is lost, broken, sold or destroyed, report the item with its amount (it comes off by itself); do not add an unequip.
 - appearance: a lasting physical change worth showing on the character's figure, such as a scar, a lost limb or a new tattoo. name is a short description.
 - rarity: only when the text signals it (glowing, legendary, a named artifact). Otherwise null.
 - skill: name is the skill. system: the magic system, discipline or path it belongs to (Qi Cultivation, Fire Magic, Swordsmanship) when the text or the world definitions make that clear, using a known system's exact name; otherwise null. requires: the known skill it builds on, evolves from or was unlocked by; otherwise null.
 - magic_system: the character takes up a magic system, discipline or path for the first time (awakens to Qi, is accepted into a school of magic, chooses a class's path). name is the system. Not for a system they already practise.
 - system and requires are null for every kind except skill.
-- lore: facts for the story's compendium that the paragraph reveals, so the author can keep track of everyone and everything. For characters: backstory, origins, family and relationships, occupation, personality, goals, secrets revealed. For creatures: what they look like, abilities, weaknesses, habitat, behaviour. For places, factions and notable items: what they are, who runs or owns them, what they are known for. subject is the exact name (a known character's known name; a compendium entry's existing name). category: character, creature, place, faction, item or other. fact is one short sentence in plain present tense, standing on its own ("Former army sergeant, discharged after an injury."). Not game-state changes already in changes, not passing actions, nothing the paragraph does not state.
+- What you remember is there so you recognise people and things and keep their names consistent. Do not report it again as lore or relations; report only what this text adds or changes.
+- lore: the story's memory of everyone and everything, for its compendium. Look for all three kinds in every paragraph:
+  - fact: backstory, origins, family, occupation, goals, secrets revealed; for creatures their abilities, weaknesses, habitat and behaviour; for places, factions and items what they are, who runs or owns them, what they are known for. fact is one short sentence in plain present tense that stands on its own ("Former army sergeant, discharged after an injury.").
+  - trait: each descriptor the text gives of how someone or something looks, dresses, moves or behaves, one entry per descriptor. fact is only the descriptor, a few words ("old", "torn grey cloak", "glowing hands", "speaks softly"). "A girl in a torn grey cloak knelt" gives a trait "torn grey cloak".
+  - said: a line of dialogue worth remembering: one that reveals something about a person, creature, place or thing, or shows a character's voice. fact is the exact words, speaker is who said them, subject is who or what the line is about (the speaker, for a line that shows their own voice). For other kinds speaker is null.
+  subject is the exact name (a known character's known name; a compendium entry's existing name). category: character, creature, place, faction, item, spell, magic or other. Nothing the paragraph does not state, nothing already in changes, and no passing actions.
+- relations: lasting links between named people, creatures, places, factions and things that the text states: family, friendship, travelling together, rivalry, enmity, love, membership, leadership, service, trade, teaching, ownership, where someone lives or something is found. relation is a short verb phrase read from subject to object ("is the sister of", "travels with", "leads", "lives in", "fears", "was healed by"). Use the same names as in lore. Not passing interactions. Relations stated by a bracketed system message count too (a party formed means its members travel together), since system messages are only tracked for game state.
 - characters: every named or clearly identified character present in the paragraph. role and description only from what the text says, otherwise null. look: only traits the text states (a grey cloak is outfit "cloak" and clothColor "#7d7f86"; colours as #rrggbb hex), otherwise null fields or null. sameAs: when the paragraph reveals that a name belongs to someone already known (the stranger turns out to be Lyra), give the known name; otherwise null.
 - quote: the shortest exact span of the paragraph that shows the change, copied character for character.
 Return empty lists when nothing applies.`;
@@ -102,8 +119,10 @@ function worldLine(world: WorldDefs): string {
 }
 
 const compendiumLine = (names?: string[]) => (names?.length ? `Compendium entries so far: ${names.join(', ')}` : '');
+const memoryBlock = (lines?: string[]) =>
+  lines?.length ? `What you remember from earlier in the book about who and what is named here:\n${lines.map((l) => `- ${l}`).join('\n')}` : '';
 
-export const EXTRACTION_SYSTEM = `You keep the character sheets for a LitRPG novel while the author writes it. You read one paragraph at a time and report what happens to the characters' game state in that paragraph.
+export const EXTRACTION_SYSTEM = `You keep the character sheets and the compendium for a LitRPG novel while the author writes it. You read one paragraph at a time and report what happens to the characters' game state in that paragraph, and what it tells the reader about its people, creatures, places, factions, items and magic.
 
 ${EXTRACTION_RULES}`;
 
@@ -116,7 +135,7 @@ export const BatchExtractionSchema = z.object({
 });
 export type BatchExtraction = z.infer<typeof BatchExtractionSchema>;
 
-export const BATCH_EXTRACTION_SYSTEM = `You keep the character sheets for a LitRPG novel while the author writes it. You read a passage of consecutive numbered paragraphs and report, paragraph by paragraph, what happens to the characters' game state.
+export const BATCH_EXTRACTION_SYSTEM = `You keep the character sheets and the compendium for a LitRPG novel while the author writes it. You read a passage of consecutive numbered paragraphs and report, paragraph by paragraph, what happens to the characters' game state and what each paragraph tells the reader about its people, creatures, places, factions, items and magic (lore and relations matter as much as game state).
 
 Return one entry per paragraph that has characters or changes, with n set to that paragraph's number; leave out paragraphs where nothing applies. Each change belongs to the paragraph that narrates it, and its quote is copied from that paragraph. Changes earlier in the passage are already true for later paragraphs. Every rule below applies to each paragraph on its own.
 
@@ -130,6 +149,8 @@ export interface BatchExtractionInput {
   sheets: string[];
   /** Names already in the compendium, so the model reuses them. */
   compendium?: string[];
+  /** What the book has said so far about the entities this passage names (see memoryFor). */
+  memory?: string[];
 }
 
 /** Everything the model needs to read a run of paragraphs, as plain text. */
@@ -142,6 +163,7 @@ export function batchExtractionPrompt(input: BatchExtractionInput): string {
     `Known characters: ${input.characters.length ? input.characters.map((c) => (c.aliases.length ? `${c.name} (also: ${c.aliases.join(', ')})` : c.name)).join('; ') : 'none yet'}`,
     worldLine(input.world),
     compendiumLine(input.compendium),
+    memoryBlock(input.memory),
     `Sheets before this passage:\n${input.sheets.length ? input.sheets.join('\n') : 'none yet'}`,
     input.previous ? `<previous_paragraph>\n${input.previous}\n</previous_paragraph>` : '',
     `<passage>\n${paragraphs.join('\n')}\n</passage>`,
@@ -152,13 +174,14 @@ export function batchExtractionPrompt(input: BatchExtractionInput): string {
 
 /** One reading per paragraph of the batch, in order; paragraphs the model left out read as empty. */
 export function splitBatch(result: BatchExtraction, count: number): Extraction[] {
-  const out: Extraction[] = Array.from({ length: count }, () => ({ characters: [], changes: [], lore: [] }));
-  for (const { n, characters, changes, lore } of result.paragraphs) {
+  const out: Extraction[] = Array.from({ length: count }, () => ({ characters: [], changes: [], lore: [], relations: [] }));
+  for (const { n, characters, changes, lore, relations } of result.paragraphs) {
     const slot = out[n - 1];
     if (!slot) continue;
     slot.characters.push(...characters);
     slot.changes.push(...changes);
     slot.lore.push(...(lore ?? []));
+    slot.relations.push(...(relations ?? []));
   }
   return out;
 }
@@ -171,6 +194,7 @@ export interface ExtractionInput {
   sheets: string[];
   parsed: string[];
   compendium?: string[];
+  memory?: string[];
 }
 
 /** Everything the model needs to read one paragraph, as plain text. */
@@ -179,6 +203,7 @@ export function extractionPrompt(input: ExtractionInput): string {
     `Known characters: ${input.characters.length ? input.characters.map((c) => (c.aliases.length ? `${c.name} (also: ${c.aliases.join(', ')})` : c.name)).join('; ') : 'none yet'}`,
     worldLine(input.world),
     compendiumLine(input.compendium),
+    memoryBlock(input.memory),
     `Current sheets:\n${input.sheets.length ? input.sheets.join('\n') : 'none yet'}`,
     `Already tracked from system messages in this paragraph: ${input.parsed.length ? input.parsed.join('; ') : 'nothing'}`,
     input.previous ? `<previous_paragraph>\n${input.previous}\n</previous_paragraph>` : '',
@@ -222,7 +247,9 @@ export function describeChange(c: Change, nameOf: (id: string) => string = (x) =
     case 'magic':
       return `Takes up ${c.system}`;
     case 'lore':
-      return `${c.subject}: ${c.fact}`;
+      return c.lore === 'said' ? `${c.subject}: "${c.fact}"${c.speaker ? ` (${c.speaker})` : ''}` : `${c.subject}: ${c.fact}`;
+    case 'relation':
+      return `${c.subject} ${c.relation} ${c.object}`;
     case 'item':
       return c.set !== undefined ? `${c.item} set to ${c.set}` : `${sign(c.delta)} ${c.item}`;
     case 'equip':
@@ -297,7 +324,9 @@ export function changeKey(c: Change): string {
     case 'magic':
       return `magic:${c.character}:${c.system.toLowerCase()}`;
     case 'lore':
-      return `lore:${c.subject.toLowerCase()}:${c.fact.toLowerCase()}`;
+      return `lore:${c.lore ?? 'fact'}:${c.subject.toLowerCase()}:${c.fact.toLowerCase()}`;
+    case 'relation':
+      return `relation:${c.subject.toLowerCase()}:${c.relation.toLowerCase()}:${c.object.toLowerCase()}`;
     case 'blessing':
       return `blessing:${c.character}:${c.blessing}`;
     case 'class':
@@ -310,6 +339,54 @@ export function changeKey(c: Change): string {
     case 'mention':
       return `mention:${c.character}`;
   }
+}
+
+type LoreFinds = Pick<Extraction, 'lore' | 'relations'>;
+
+/** Records for what a reading says about people and things, skipping anything already known from this paragraph. */
+function loreRecords(project: Project, paragraphId: string, text: string, lore: LoreFinds['lore'], relations: LoreFinds['relations'], existing: Set<string>, newId: () => string): ChangeRecord[] {
+  const reg = project.characters;
+  const textHash = hashText(text);
+  const out: ChangeRecord[] = [];
+  for (const l of lore) {
+    const who = findByName(reg, l.subject);
+    const change: Change = {
+      kind: 'lore',
+      subject: l.subject,
+      category: who ? 'character' : l.category,
+      fact: l.fact,
+      ...(l.kind && l.kind !== 'fact' ? { lore: l.kind } : {}),
+      ...(l.kind === 'said' && l.speaker ? { speaker: l.speaker } : {}),
+      ...(who ? { character: who.id } : {}),
+    };
+    const key = changeKey(change);
+    if (existing.has(key)) continue;
+    existing.add(key);
+    out.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'applied', change, quote: text.includes(l.quote) ? l.quote : undefined });
+  }
+  for (const x of relations) {
+    const a = findByName(reg, x.subject);
+    const b = findByName(reg, x.object);
+    const change: Change = { kind: 'relation', subject: x.subject, object: x.object, relation: x.relation, ...(a ? { subjectId: a.id } : {}), ...(b ? { objectId: b.id } : {}) };
+    const key = changeKey(change);
+    if (existing.has(key)) continue;
+    existing.add(key);
+    out.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'applied', change, quote: text.includes(x.quote) ? x.quote : undefined });
+  }
+  return out;
+}
+
+/**
+ * Adds a lore reading of one paragraph (from a chapter's lore pass) to the
+ * compendium, leaving the paragraph's other records alone. Returns how many
+ * new memories it added.
+ */
+export function applyLore(input: Project, paragraphId: string, text: string, finds: LoreFinds, newId: () => string): { project: Project; added: number } {
+  const project: Project = structuredClone(input);
+  const existing = new Set(project.records.filter((r) => r.change.kind === 'lore' || r.change.kind === 'relation').map((r) => changeKey(r.change)));
+  const added = loreRecords(project, paragraphId, text, finds.lore, finds.relations, existing, newId);
+  project.records = [...project.records, ...added];
+  return { project, added: added.length };
 }
 
 /**
@@ -375,14 +452,7 @@ export function applyExtraction(
     proposals++;
   });
   // Lore goes straight into the compendium; the author strikes out anything wrong there.
-  for (const l of result.lore ?? []) {
-    const who = findByName(reg, l.subject);
-    const change: Change = { kind: 'lore', subject: l.subject, category: who ? 'character' : l.category, fact: l.fact, ...(who ? { character: who.id } : {}) };
-    const key = changeKey(change);
-    if (existing.has(key)) continue;
-    existing.add(key);
-    records.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'applied', change, quote: text.includes(l.quote) ? l.quote : undefined });
-  }
+  records.push(...loreRecords(project, paragraphId, text, result.lore ?? [], result.relations ?? [], existing, newId));
   for (const m of merges) {
     records.push({ id: newId(), paragraphId, textHash, source: 'ai', status: 'proposed', change: m });
     proposals++;
@@ -405,7 +475,7 @@ export function applySkim(
   result: Skim,
   newId: () => string,
 ): { project: Project; created: string[] } {
-  const extracted = applyExtraction(input, chapter.paragraphs[0]!.id, chapter.paragraphs[0]!.text, { characters: result.characters, changes: [], lore: [] }, newId);
+  const extracted = applyExtraction(input, chapter.paragraphs[0]!.id, chapter.paragraphs[0]!.text, { characters: result.characters, changes: [], lore: [], relations: [] }, newId);
   const project = extracted.project;
   // Move each appearance to the paragraph that actually names the character.
   for (const r of project.records) {
@@ -422,7 +492,7 @@ export function applySkim(
 }
 
 function withCanonical(c: Change, p: Project): Change {
-  if (c.kind === 'merge') return c;
+  if (c.kind === 'merge' || c.kind === 'relation') return c;
   if (c.kind === 'lore') return c.character ? { ...c, character: canonical(p.characters, c.character) } : c;
   return { ...c, character: canonical(p.characters, c.character) };
 }

@@ -1,12 +1,14 @@
 'use client';
 
-import { FREE_POINTS, label, slotFor, type Rarity, type ArtStyle, type ContinuityWarning, type HairStyle, type Look, type Outfit, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
+import { FREE_POINTS, label, loreKey, slotFor, type CompendiumEntry, type Rarity, type ArtStyle, type ContinuityWarning, type HairStyle, type Look, type Outfit, type PanelKey, type PlacedParagraph, type Sheet, type WorldDefs } from '@questwright/engine';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { studioCharacter } from '@/figure/studio';
 import { CharacterModel } from '@/figure/vrm/CharacterModel';
+import { SheetFigure } from './Painting';
 import { frameFromProse, modelFor } from '@/figure/vrm/models';
 import { desktop } from '@/lib/desktop';
 import { LoreFacts, LoreNote } from './Compendium';
+import { IconImage, IconRow, PaintIconsButton, SkillIcon } from './SkillIcon';
 import { TalentTree } from './TalentTree';
 import { gearFor } from '@/figure/gear';
 import { lookOf } from '@/figure/look';
@@ -24,6 +26,8 @@ let liveInStudio: string | null = null;
 interface Props {
   sheet: Sheet;
   world: WorldDefs;
+  /** For what the story has said about each piece of gear. */
+  compendium: CompendiumEntry[];
   warnings: ContinuityWarning[];
   flat: PlacedParagraph[];
   /** Paragraph the panel is showing; author corrections are recorded there. */
@@ -31,9 +35,10 @@ interface Props {
   onJump(pid: string): void;
 }
 
-export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: Props) {
+export function CharacterSheet({ sheet, world, compendium, warnings, flat, atPid, onJump }: Props) {
   const character = useStudio((s) => s.project.characters[sheet.characterId]);
   const style: ArtStyle = useStudio((s) => s.project.art?.style ?? 'painterly');
+  const render = useStudio((s) => s.project.art?.render ?? 'anime');
   const togglePin = useStudio((s) => s.togglePin);
   const toggleLock = useStudio((s) => s.toggleAppearanceLock);
   const setLook = useStudio((s) => s.setLook);
@@ -41,6 +46,11 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
   const wear = useStudio((s) => s.wear);
   const setSkillPath = useStudio((s) => s.setSkillPath);
   const [hover, setHover] = useState<string | null>(null);
+  const showGear = useStudio((s) => s.showGear);
+  const setShowGear = useStudio((s) => s.setShowGear);
+  /** The slot whose gear is shown in detail: clicked, or else hovered. */
+  const [picked, setPicked] = useState<string | null>(null);
+  const openCodex = useStudio((s) => s.setCodexOpen);
   const [editing, setEditing] = useState(false);
   const features = useMemo(() => gearFor(sheet), [sheet]);
   const manuscript = useStudio((s) => s.manuscript);
@@ -90,13 +100,17 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
         tabIndex={0}
         className={`tile${it ? '' : ' empty'}`}
         title={`${slot}: ${it ? it.item : 'empty'}`}
+        role={it ? 'button' : undefined}
+        aria-pressed={it ? picked === slot : undefined}
+        onClick={() => it && setPicked(picked === slot ? null : slot)}
+        onKeyDown={(e) => it && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setPicked(picked === slot ? null : slot))}
         style={it ? ({ '--rar': rar(it.rarity) } as React.CSSProperties) : undefined}
         onMouseEnter={() => setHover(slot)}
         onMouseLeave={() => setHover(null)}
         onFocus={() => setHover(slot)}
         onBlur={() => setHover(null)}
       >
-        {it && <b>{initials(it.item)}</b>}
+        {it && <IconImage name={it.item} fallback={<b className="tile-name">{it.item}</b>} />}
         <small>{slot}</small>
       </div>
     );
@@ -118,14 +132,30 @@ export function CharacterSheet({ sheet, world, warnings, flat, atPid, onJump }: 
         <div className="doll-top">
           <h3>{name}</h3>
           {tag && <div className="ep">{tag}</div>}
+          <button className={`mini gear-toggle${showGear ? ' on' : ''}`} aria-pressed={showGear} title={showGear ? 'Hide the equipment slots' : 'Show the equipment slots'} onClick={() => setShowGear(!showGear)}>
+            Gear
+          </button>
         </div>
-        <div className="doll-grid">
-          <div className="scol">{left.map(tile)}</div>
+        <div className={`doll-grid${showGear ? '' : ' no-gear'}`}>
+          {showGear && <div className="scol">{left.map(tile)}</div>}
           <div className="fig3d">
-            <CharacterModel character={character} suggestedModel={suggested} look={look} features={features} style={style} highlight={hover} label={`${name}, wearing what the story has given them`} />
+            <SheetFigure
+              characterId={sheet.characterId}
+              name={name}
+              figure={<CharacterModel character={character} suggestedModel={suggested} look={look} features={features} style={style} render={render} highlight={hover} label={`${name}, wearing what the story has given them`} />}
+            />
           </div>
-          <div className="scol">{right.map(tile)}</div>
+          {showGear && <div className="scol">{right.map(tile)}</div>}
         </div>
+        {showGear && <div className="rows-tools gear-tools"><PaintIconsButton names={Object.values(sheet.equipment).map((e) => e.item)} /></div>}
+        {showGear && <GearDetail
+          slot={hover && sheet.equipment[hover] ? hover : picked}
+          sheet={sheet}
+          compendium={compendium}
+          flat={flat}
+          onJump={onJump}
+          onCodex={(key) => openCodex(key)}
+        />}
         <div className="card-info">
           {character.description && <p>{character.description}</p>}
           {!!character.aliases.length && <div className="meta">Also called: {character.aliases.join(', ')}</div>}
@@ -245,10 +275,11 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid
             {wearable.length > 1 && <button className="mini on" onClick={() => putOn(oneEach(wearable))}>Wear all</button>}
           </div>
         )}
+        <div className="rows-tools"><PaintIconsButton names={Object.keys(s.items)} /></div>
         <div className="bag">
           {Object.entries(s.items).map(([n, v]) => (
             <button key={n} className={`cell${unsure(`item:${n}`) ? ' unsure' : ''}`} title={`${n}. Click to correct the count.`} onClick={() => correct('item', n, v.count)}>
-              <span className="glyph" style={{ color: rar(v.rarity) }}>{initials(n)}</span>
+              <span className="glyph" style={{ color: rar(v.rarity) }}><IconImage name={n} fallback={initials(n)} /></span>
               <span className="nm">{n}</span>
               <span className="qty">{unsure(`item:${n}`) ? '?' : ''}{v.count}</span>
             </button>
@@ -260,8 +291,10 @@ function body(s: Sheet, p: PanelKey, warnings: ContinuityWarning[], onJump: (pid
     case 'skills':
       return (
         <div className="rows">
+          <div className="rows-tools"><PaintIconsButton names={s.skills.filter((k) => !k.system).map((k) => k.name)} /></div>
           {s.skills.filter((k) => !k.system).map((k) => (
-            <div className="row" key={k.name}>
+            <div className="row skill-row" key={k.name}>
+              <SkillIcon name={k.name} />
               <span>
                 {k.name}
                 {k.evolvedFrom && <span className="sub">Evolved from {k.evolvedFrom}</span>}
@@ -346,5 +379,41 @@ function Section({ id, title, count, children, magic }: { id: string; title: str
       </button>
       {!collapsed && <div className="pnl-b">{children}</div>}
     </section>
+  );
+}
+
+const RARITY_LABEL: Record<Rarity, string> = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
+
+/** The gear in one slot: what it is, when it was put on, and what the story has said about it. */
+function GearDetail({ slot, sheet, compendium, flat, onJump, onCodex }: { slot: string | null; sheet: Sheet; compendium: CompendiumEntry[]; flat: PlacedParagraph[]; onJump(pid: string): void; onCodex(key: string): void }) {
+  const it = slot ? sheet.equipment[slot] : undefined;
+  if (!slot || !it) {
+    return Object.keys(sheet.equipment).length ? <p className="gear-hint">Point at or click a slot to see the gear in it.</p> : null;
+  }
+  const entry = compendium.find((e) => e.key === loreKey(it.item));
+  const where = it.at ? flat.find((p) => p.id === it.at) : undefined;
+  const traits = entry ? [...new Set(entry.traits.map((t) => t.text))] : [];
+  const carried = Object.entries(sheet.items).find(([k]) => k.toLowerCase() === it.item.toLowerCase())?.[1];
+  return (
+    <div className="gear-detail" style={{ '--rar': rar(it.rarity) } as React.CSSProperties}>
+      <div className="gd-head">
+        <b>{it.item}</b>
+        <span className="gd-meta">
+          {[it.rarity ? RARITY_LABEL[it.rarity] : null, slot, carried && carried.count > 1 ? `${carried.count} carried` : null].filter(Boolean).join(' · ')}
+        </span>
+      </div>
+      {traits.length > 0 && <div className="gd-traits">{traits.slice(0, 6).map((t) => <span key={t}>{t}</span>)}</div>}
+      {entry && entry.facts.length > 0 && (
+        <ul className="gd-facts">
+          {entry.facts.slice(-3).map((f) => <li key={f.recordId}>{f.fact}</li>)}
+        </ul>
+      )}
+      {!traits.length && !entry?.facts.length && <p className="gd-none">The story has not described it yet.</p>}
+      <IconRow key={it.item} entryKey={loreKey(it.item)} name={it.item} label="Item icon" />
+      <div className="gd-acts">
+        {where && <button className="at" onClick={() => onJump(where.id)}>Put on {label(where)}</button>}
+        {entry && <button className="mini" onClick={() => onCodex(entry.key)}>Open in codex</button>}
+      </div>
+    </div>
   );
 }

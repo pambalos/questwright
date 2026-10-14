@@ -1,5 +1,6 @@
 import { flatten, label, type PlacedParagraph } from './manuscript';
 import { canonical } from './registry';
+import { canonicalSlot } from './slots';
 import type { ChangeRecord, CompendiumEntry, ContinuityWarning, LoreCategory, MagicSystem, Manuscript, PanelKey, Project, Registry, Sheet, WorldDefs, WorldState } from './types';
 
 const PANEL_ORDER: PanelKey[] = ['stats', 'equipment', 'inventory', 'skills', 'currencies', 'blessings', 'titles'];
@@ -29,6 +30,10 @@ const add = (list: string[], v: string) => {
 };
 
 /** Applied records in manuscript order; records on paragraphs that no longer exist are skipped. */
+
+/** The same item, however the story capitalised it. */
+const sameItem = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
 export function orderedRecords(records: ChangeRecord[], paras: Map<string, PlacedParagraph>): ChangeRecord[] {
   return records
     .map((r, i) => ({ r, i, at: paras.get(r.paragraphId)?.index }))
@@ -64,6 +69,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
     s.promoted = true;
     if (!s.magic.some((m) => m.system === system)) s.magic.push({ system, at });
     tree(world, system);
+    entry(loreKey(system), system, 'magic', at);
   };
   const learn = (system: string, skill: string, requires: string | undefined, at: string, holder: string) => {
     const t = tree(world, system);
@@ -75,7 +81,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
   const entries = new Map<string, CompendiumEntry>();
   const entry = (key: string, name: string, category: LoreCategory, at: string, characterId?: string) => {
     let e = entries.get(key);
-    if (!e) entries.set(key, (e = { key, name, category, firstAt: at, facts: [], ...(characterId ? { characterId } : {}) }));
+    if (!e) entries.set(key, (e = { key, name, category, firstAt: at, facts: [], traits: [], said: [], relations: [], aliases: [], ...(characterId ? { characterId } : {}) }));
     // A later, more specific reading of what something is wins over "other".
     if (e.category === 'other' && category !== 'other') e.category = category;
     return e;
@@ -106,14 +112,37 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
 
     if (c.kind === 'merge') continue;
     if (c.kind === 'lore') {
-      const fact = { fact: c.fact, at: p.id, recordId: r.id };
       const who = c.character ? canonical(reg, c.character) : undefined;
+      let e: CompendiumEntry;
       if (who && reg[who]) {
         seen(who, p.index);
-        sheet(who).lore.push(fact);
-        entry(`char:${who}`, reg[who]!.name, 'character', p.id, who).facts.push(fact);
+        e = entry(`char:${who}`, reg[who]!.name, 'character', p.id, who);
       } else {
-        entry(`lore:${c.subject.trim().toLowerCase()}`, c.subject.trim(), c.category, p.id).facts.push(fact);
+        e = entry(loreKey(c.subject), c.subject.trim(), c.category, p.id);
+      }
+      const at = { at: p.id, recordId: r.id };
+      // The same words twice (a description box repeated later) are one memory.
+      const same = (x: string) => x.trim().toLowerCase() === c.fact.trim().toLowerCase();
+      if (c.lore !== 'said' && (c.lore === 'trait' ? e.traits.some((t) => same(t.text)) : e.facts.some((f) => same(f.fact)))) continue;
+      if (c.lore === 'trait') e.traits.push({ text: c.fact, ...at });
+      else if (c.lore === 'said') e.said.push({ text: c.fact, ...(c.speaker ? { speaker: c.speaker } : {}), ...at });
+      else {
+        e.facts.push({ fact: c.fact, ...at });
+        if (who && reg[who]) sheet(who).lore.push({ fact: c.fact, ...at });
+      }
+      continue;
+    }
+    if (c.kind === 'relation') {
+      // Either end can be a character or anything else the story names.
+      const end = (name: string, id?: string) => {
+        const who = id ? canonical(reg, id) : undefined;
+        return who && reg[who] ? entry(`char:${who}`, reg[who]!.name, 'character', p.id, who) : entry(loreKey(name), name.trim(), 'other', p.id);
+      };
+      const a = end(c.subject, c.subjectId);
+      const b = end(c.object, c.objectId);
+      if (a !== b) {
+        a.relations.push({ key: b.key, name: b.name, relation: c.relation, direction: 'out', at: p.id, recordId: r.id });
+        b.relations.push({ key: a.key, name: a.name, relation: c.relation, direction: 'in', at: p.id, recordId: r.id });
       }
       continue;
     }
@@ -171,6 +200,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
           s.skills.push({ name: c.skill, level: c.level, at: p.id, ...(c.replaces ? { evolvedFrom: c.replaces } : {}), ...(system ? { system } : {}), ...(requires ? { requires } : {}) });
         }
         add(world.skills, c.skill);
+        entry(loreKey(c.skill), c.skill, 'spell', p.id);
         if (system) {
           takeUp(id, system, p.id);
           learn(system, c.skill, requires, p.id, id);
@@ -181,21 +211,33 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
         takeUp(id, systemName(world, c.system), p.id);
         break;
       case 'item': {
-        const v = c.set ?? (s.items[c.item]?.count ?? 0) + c.delta;
-        if (c.set !== undefined) (carried as Set<string> | null)?.delete(`${id}|item:${c.item}`);
+        // The same thing however it was capitalised: "shield" is the Shield already carried.
+        const key = Object.keys(s.items).find((k) => sameItem(k, c.item)) ?? c.item;
+        const v = c.set ?? (s.items[key]?.count ?? 0) + c.delta;
+        if (c.set !== undefined) (carried as Set<string> | null)?.delete(`${id}|item:${key}`);
         if (v < 0) warn(id, 'negative-item', `${name} gives up more ${c.item} than they have`);
-        if (v > 0) s.items[c.item] = { count: v, rarity: c.rarity ?? s.items[c.item]?.rarity };
-        else delete s.items[c.item];
+        if (v > 0) s.items[key] = { count: v, rarity: c.rarity ?? s.items[key]?.rarity };
+        else delete s.items[key];
+        // Gear that is lost, broken, sold or used up comes off with it.
+        if (v <= 0 && c.delta < 0) for (const [slot, e] of Object.entries(s.equipment)) if (sameItem(e.item, c.item)) delete s.equipment[slot];
+        // Notable finds get a compendium entry; everyday things do not.
+        if (c.delta > 0 && c.rarity && c.rarity !== 'common') entry(loreKey(c.item), c.item, 'item', p.id);
         unlock(id, 'inventory');
         break;
       }
-      case 'equip':
-        s.equipment[c.slot] = { item: c.item, rarity: c.rarity };
-        add(world.slots, c.slot);
+      case 'equip': {
+        const slot = canonicalSlot(c.slot);
+        // One of a thing can only be in one place: moving the hammer from back to hand empties the back.
+        const owned = Object.entries(s.items).find(([k]) => sameItem(k, c.item))?.[1];
+        if ((owned?.count ?? 1) < 2) for (const [other, e] of Object.entries(s.equipment)) if (other !== slot && sameItem(e.item, c.item)) delete s.equipment[other];
+        s.equipment[slot] = { item: c.item, rarity: c.rarity ?? owned?.rarity, at: p.id };
+        entry(loreKey(c.item), c.item, 'item', p.id);
+        add(world.slots, slot);
         unlock(id, 'equipment');
         break;
+      }
       case 'unequip':
-        delete s.equipment[c.slot];
+        delete s.equipment[canonicalSlot(c.slot)];
         break;
       case 'blessing':
         if (!s.blessings.includes(c.blessing)) s.blessings.push(c.blessing);
@@ -238,6 +280,7 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
     if (c && first) {
       const e = entry(`char:${c.id}`, c.name, 'character', first.id, c.id);
       e.name = c.name;
+      e.aliases = [...c.aliases];
       if ((paras.get(e.firstAt)?.index ?? Infinity) > first.index) e.firstAt = first.id;
     }
   }
@@ -247,6 +290,8 @@ export function fold(project: Project, manuscript: Manuscript, upto?: number): W
 }
 
 /** A known magic system's own spelling of a name, so "qi cultivation" and "Qi Cultivation" are one system. */
+export const loreKey = (name: string) => `lore:${name.trim().toLowerCase()}`;
+
 function systemName(world: WorldDefs, name: string): string {
   const n = name.trim();
   return world.magic.find((m) => m.name.toLowerCase() === n.toLowerCase())?.name ?? n;

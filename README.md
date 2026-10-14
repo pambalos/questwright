@@ -84,6 +84,19 @@ npm run build
   of earlier books is one request per chapter.
 - The manuscript leaves the browser only for these extraction requests.
 
+## Illustrations: painted codex art
+
+- **Illustrate** on a codex page paints the entry. Claude writes the image brief from what the
+  book remembers (traits, facts, equipped gear); an image service paints it. Choose the service
+  in Settings: Nano Banana Pro (Google Gemini, default), GPT Image (OpenAI) or FLUX.2 pro
+  (Black Forest Labs). Keys are server-side (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `BFL_API_KEY`);
+  the desktop app stores them encrypted from Settings.
+- The approved painting of an entry is sent as a reference with every new one, and up to three
+  paintings marked as house style keep the look consistent. Images are kept in the browser's
+  IndexedDB, versioned per entry; the book's save holds only their details.
+- **Automatic painting** (off by default) repaints an entry when its description, traits or gear
+  change while the book is open, under a monthly spending cap. Costs are estimates.
+
 ## Known gaps
 
 - Figures are built from simple shapes on a fixed skeleton. Generated, rigged models per

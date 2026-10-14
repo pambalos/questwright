@@ -5,7 +5,9 @@ import { useRef, useState } from 'react';
 import { desktop } from '@/lib/desktop';
 import { useStudio } from '@/lib/store';
 import { ApiKeyDialog } from './ApiKeyDialog';
+import { PaintQueue } from './PaintQueue';
 import { SeriesImport } from './SeriesImport';
+import { Settings } from './Settings';
 
 const WORDS_PER_LEVEL = 500;
 
@@ -14,6 +16,7 @@ export function Header() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [series, setSeries] = useState(false);
   const [keyOpen, setKeyOpen] = useState(false);
+  const [settings, setSettings] = useState(false);
   const words = wordCount(s.manuscript);
   const level = Math.floor(words / WORDS_PER_LEVEL) + 1;
   const pct = ((words % WORDS_PER_LEVEL) / WORDS_PER_LEVEL) * 100;
@@ -59,6 +62,7 @@ export function Header() {
         <span>{words.toLocaleString()} words · {s.achievements.length} achievements</span>
       </div>
       <span className={`pill ${ai.cls}`}><span className="dot" />{ai.text}</span>
+      <PaintQueue onSettings={() => setSettings(true)} />
       {desktop() && (
         <button className="btn" onClick={() => setKeyOpen(true)}>
           {s.aiBackend?.kind === 'api' ? 'API key' : 'Add API key'}
@@ -77,9 +81,11 @@ export function Header() {
         <button className="btn" onClick={() => setSeries(true)}>Import series</button>
         <button className="btn" onClick={exportBook}>Export</button>
         <button className="btn" onClick={() => fileRef.current?.click()}>Open export</button>
+        <button className="btn" onClick={() => setSettings(true)}>Settings</button>
         <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importBook(f); e.target.value = ''; }} />
       </div>
       {series && <SeriesImport onClose={() => setSeries(false)} />}
+      {settings && <Settings onClose={() => setSettings(false)} />}
     </header>
   );
 }

@@ -70,7 +70,7 @@ export function cliAuth(): Promise<CliAuth> {
 const TIMEOUT_MS = 10 * 60_000;
 
 /** One headless run: no tools, no settings, no saved session; the answer must match the schema. */
-export function runClaude<T>(opts: { system: string; prompt: string; schema: z.ZodType<T> }): Promise<T> {
+export function runClaude<T>(opts: { system: string; prompt: string; schema: z.ZodType<T>; effort?: string }): Promise<T> {
   const cli = claudeCli();
   if (!cli) return Promise.reject(new CliError('Claude Code is not set up for this app.', 503));
   // The CLI's validator does not know the draft-2020-12 meta-schema tag zod adds.
@@ -82,7 +82,7 @@ export function runClaude<T>(opts: { system: string; prompt: string; schema: z.Z
     '--json-schema', JSON.stringify(schema),
     '--system-prompt', opts.system,
     '--model', MODEL,
-    '--effort', EFFORT,
+    '--effort', opts.effort ?? EFFORT,
     '--tools', '',
     '--strict-mcp-config',
     '--setting-sources', '',

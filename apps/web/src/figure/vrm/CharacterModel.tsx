@@ -1,6 +1,6 @@
 'use client';
 
-import type { ArtStyle, Character, Look } from '@questwright/engine';
+import type { ArtStyle, Character, Look, RenderStyle } from '@questwright/engine';
 import { useEffect, useRef, useState } from 'react';
 import { Figure2D } from '../Figure2D';
 import type { Feature } from '../gear';
@@ -12,6 +12,8 @@ interface Props {
   look: Look;
   features: Feature[];
   style: ArtStyle;
+  /** Anime (animated) or storybook (a still ink drawing). */
+  render?: RenderStyle;
   highlight: string | null;
   label: string;
   /** Bumped when the author uploads a new custom model, to force a reload. */
@@ -21,7 +23,7 @@ interface Props {
 }
 
 /** The character screen: a posed, lit VRM model wearing what the sheet says. Falls back to 2D without WebGL. */
-export function CharacterModel({ character, look, features, style, highlight, label, modelVersion = 0, suggestedModel }: Props) {
+export function CharacterModel({ character, look, features, style, render = 'anime', highlight, label, modelVersion = 0, suggestedModel }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const stage = useRef<CharacterStage | null>(null);
   const [ready, setReady] = useState(false);
@@ -57,8 +59,8 @@ export function CharacterModel({ character, look, features, style, highlight, la
 
   useEffect(() => {
     if (!ready) return;
-    void stage.current?.show({ id: character.id, version: modelVersion, model, look, features, style });
-  }, [ready, character.id, model, look, features, style, modelVersion]);
+    void stage.current?.show({ id: character.id, version: modelVersion, model, look, features, style, render });
+  }, [ready, character.id, model, look, features, style, render, modelVersion]);
 
   useEffect(() => {
     stage.current?.highlight(highlight);

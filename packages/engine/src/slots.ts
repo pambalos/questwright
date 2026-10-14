@@ -22,3 +22,30 @@ export function slotFor(item: string): string | undefined {
   if (has(/\b(sword|blade|sabre|saber|katana|rapier|dagger|knife|axe|hatchet|mace|hammer|club|maul|flail|spear|lance|halberd|glaive|pike|staff|wand|rod|bow|crossbow)\b/)) return 'Main hand';
   return undefined;
 }
+
+/** Slot names the story (or the AI) uses for the same place on the body, mapped to one name each. */
+const SLOT_ALIASES: [RegExp, string][] = [
+  [/^(main ?hand|right ?hand|weapon|primary|hand|hands? \(weapon\)|wielded)$/, 'Main hand'],
+  [/^(off ?hand|left ?hand|secondary|shield)$/, 'Off hand'],
+  [/^(head|helm|helmet|headgear|face)$/, 'Head'],
+  [/^(chest|body|torso|armou?r|body armou?r|top|shirt|upper body)$/, 'Chest'],
+  [/^(legs?|leggings|pants|trousers|lower body|shins?|knees?)$/, 'Legs'],
+  [/^(feet|foot|boots?|shoes?)$/, 'Feet'],
+  [/^(hands|gloves?|gauntlets?)$/, 'Hands'],
+  [/^(arms?|forearms?|wrists?|bracers?|vambraces?)$/, 'Arms'],
+  [/^(shoulders?|pauldrons?)$/, 'Shoulders'],
+  [/^(back|pack|backpack|cloak|cape)$/, 'Back'],
+  [/^(belt|waist|hip|hips|sash)$/, 'Belt'],
+  [/^(neck|necklace|amulet)$/, 'Neck'],
+  [/^(ring|finger|rings?|ring \d|(left|right) ring)$/, 'Ring'],
+];
+
+/**
+ * One name for each place gear goes, so "Forearms" and "Arms" are the same
+ * slot and new bracers replace the old. Unknown slot names are kept as written.
+ */
+export function canonicalSlot(slot: string): string {
+  const s = slot.trim().toLowerCase().replace(/\s+slot$/, '');
+  for (const [re, name] of SLOT_ALIASES) if (re.test(s)) return name;
+  return slot.trim();
+}

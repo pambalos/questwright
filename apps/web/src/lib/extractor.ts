@@ -1,7 +1,9 @@
 'use client';
 
-import { describeChange, flatten, fold, summarizeSheet } from '@questwright/engine';
+import { describeChange, flatten, fold, memoryFor, summarizeSheet } from '@questwright/engine';
 import { useEffect } from 'react';
+import type { ImageProvider } from './image-providers';
+import { fetchLocal } from './illustrator';
 import { useStudio, type AiBackend, type StudioState } from './store';
 
 const MAX_IN_FLIGHT = 2;
@@ -24,12 +26,13 @@ function requestFor(s: StudioState, pid: string) {
         .map((c) => ({ name: c.name, aliases: c.aliases })),
       world: before.world,
       compendium: before.compendium.map((e) => e.name).slice(0, 400),
+      memory: memoryFor(before, [flat[p.index - 1]?.text ?? '', p.text]),
       sheets: Object.values(before.sheets)
         .filter((sh) => sh.promoted)
         .map((sh) => summarizeSheet(name(sh.characterId), sh)),
       parsed: s.project.records
         .filter((r) => r.paragraphId === pid && r.source === 'parser')
-        .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
+        .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' || r.change.kind === 'relation' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
     },
   };
 }
@@ -55,8 +58,28 @@ async function run(pid: string) {
 }
 
 /** Subscription reading: up to this much consecutive prose goes in one request. */
-const BATCH_PARAGRAPHS = 40;
-const BATCH_CHARS = 24000;
+export const BATCH_PARAGRAPHS = 40;
+export const BATCH_CHARS = 24000;
+
+/** How many requests reading these paragraphs takes: one each with an API key, batched by chapter with a subscription. */
+export function requestsFor(plan: { chapter: number; chars: number }[], batched: boolean): number {
+  if (!batched) return plan.length;
+  let n = 0;
+  let count = 0;
+  let chars = 0;
+  let chapter = -1;
+  for (const p of plan) {
+    if (p.chapter !== chapter || count >= BATCH_PARAGRAPHS || chars + p.chars > BATCH_CHARS) {
+      n++;
+      count = 0;
+      chars = 0;
+      chapter = p.chapter;
+    }
+    count++;
+    chars += p.chars;
+  }
+  return n;
+}
 
 /** Queued paragraphs from the first one onwards, within one chapter and in manuscript order, up to the batch limits. */
 function pickBatch(s: StudioState, ready: (pid: string) => boolean): string[] {
@@ -102,7 +125,7 @@ async function runBatch(pids: string[]) {
             text: p.text,
             parsed: s.project.records
               .filter((r) => covered.has(r.paragraphId) && r.source === 'parser')
-              .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
+              .map((r) => (r.change.kind === 'merge' || r.change.kind === 'lore' || r.change.kind === 'relation' ? describeChange(r.change, name) : `${name(r.change.character)}: ${describeChange(r.change, name)}`)),
           };
         }),
         previous: flat[first.index - 1]?.text,
@@ -111,6 +134,8 @@ async function runBatch(pids: string[]) {
           .map((c) => ({ name: c.name, aliases: c.aliases })),
         world: before.world,
         compendium: before.compendium.map((e) => e.name).slice(0, 400),
+        // What the book has said so far about everyone and everything this passage names.
+        memory: memoryFor(before, [flat[first.index - 1]?.text ?? '', ...items.map((p) => p.text)], 24),
         sheets: Object.values(before.sheets)
           .filter((sh) => sh.promoted)
           .map((sh) => summarizeSheet(name(sh.characterId), sh)),
@@ -181,18 +206,21 @@ export function useExtractor() {
 export function useAiStatus() {
   const code = useStudio((s) => s.accessCode);
   const setAiStatus = useStudio((s) => s.setAiStatus);
+  const setImageKeys = useStudio((s) => s.setImageKeys);
   useEffect(() => {
     let live = true;
     fetch('/api/status', { headers: { 'x-qw-access': code } })
-      .then((r) => r.json() as Promise<{ ai: boolean; locked: boolean; backend: AiBackend['kind'] | null; plan: string | null; cliSignedOut?: boolean }>)
+      .then((r) => r.json() as Promise<{ ai: boolean; locked: boolean; backend: AiBackend['kind'] | null; plan: string | null; model?: string; cliSignedOut?: boolean; images?: Record<ImageProvider, boolean> }>)
       .then((d) => {
         if (!live) return;
-        const backend = d.backend ? { kind: d.backend, plan: d.plan, signedOut: d.cliSignedOut } : null;
+        if (d.images) setImageKeys(d.images);
+        void fetchLocal(code);
+        const backend = d.backend ? { kind: d.backend, plan: d.plan, model: d.model, signedOut: d.cliSignedOut } : null;
         setAiStatus(!d.ai ? 'off' : d.locked ? 'locked' : 'on', backend);
       })
       .catch(() => live && setAiStatus('off', null));
     return () => {
       live = false;
     };
-  }, [code, setAiStatus]);
+  }, [code, setAiStatus, setImageKeys]);
 }

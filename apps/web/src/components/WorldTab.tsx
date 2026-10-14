@@ -1,8 +1,6 @@
 'use client';
 
-import type { ArtStyle, PlacedParagraph, WorldDefs } from '@questwright/engine';
-import { STYLE_LABEL } from '@/figure/look';
-import { useStudio } from '@/lib/store';
+import type { PlacedParagraph, WorldDefs } from '@questwright/engine';
 import { TalentTree } from './TalentTree';
 
 const SECTIONS: { key: Exclude<keyof WorldDefs, 'magic'>; title: string }[] = [
@@ -14,8 +12,6 @@ const SECTIONS: { key: Exclude<keyof WorldDefs, 'magic'>; title: string }[] = [
 ];
 
 export function WorldTab({ world, flat, onJump }: { world: WorldDefs; flat: PlacedParagraph[]; onJump(pid: string): void }) {
-  const style = useStudio((s) => s.project.art?.style ?? 'painterly');
-  const setStyle = useStudio((s) => s.setArtStyle);
   return (
     <>
       <p className="note">The rules of this story&apos;s system, built from what the manuscript has introduced so far. Every character shares these definitions.</p>
@@ -37,14 +33,6 @@ export function WorldTab({ world, flat, onJump }: { world: WorldDefs; flat: Plac
           )}
         </div>
       ))}
-      <div className="codex">
-        <h4>Character art style</h4>
-        <div className="chips">
-          {(Object.keys(STYLE_LABEL) as ArtStyle[]).map((k) => (
-            <button key={k} className={`chip${style === k ? ' sel' : ''}`} aria-pressed={style === k} onClick={() => setStyle(k)}>{STYLE_LABEL[k]}</button>
-          ))}
-        </div>
-      </div>
     </>
   );
 }

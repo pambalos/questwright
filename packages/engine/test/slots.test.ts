@@ -31,7 +31,7 @@ describe('re-reading a paragraph', () => {
     const reading: Extraction = {
       characters: [],
       changes: [{ kind: 'gain_item', character: 'Kael', name: 'Obsidian helmet', amount: 1, slot: null, rarity: null, system: null, requires: null, quote: 'dagger' }],
-      lore: [],
+      lore: [], relations: [],
     };
     const first = applyExtraction(parsedProject(SAMPLE).project, 'p4', p4.text, reading, ids()).project;
     const claimed = { ...first, records: first.records.map((r) => (r.status === 'proposed' ? { ...r, status: 'applied' as const } : r)) };

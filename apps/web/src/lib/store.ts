@@ -3,6 +3,7 @@
 import type { JSONContent } from '@tiptap/core';
 import {
   applyExtraction,
+  applyLore,
   applyMerge,
   applySkim,
   flatten,
@@ -16,28 +17,40 @@ import {
   SAMPLE,
   SAMPLE_TITLE,
   type ArtStyle,
+  type ArtStyleKey,
   type Extraction,
+  type ChapterStory,
+  type GameCard,
+  type Narrative,
+  type Illustration,
+  type LearnedPattern,
   type Look,
   type Manuscript,
   type Project,
   type Rarity,
+  type RenderStyle,
   type Skim,
 } from '@questwright/engine';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { BLANK_DOC, docToManuscript, manuscriptToDoc } from './doc';
+import type { ImageProvider, ImageQuality, Painter } from './image-providers';
 import { idbDelete, idbGet, idbPersist, idbSet } from './idb-storage';
 import { newId } from './ids';
 import { ACHIEVEMENTS } from './achievements';
 import { snapshot, unlockToasts, type Snapshot, type Toast } from './unlocks';
 
 export type AiStatus = 'checking' | 'on' | 'off' | 'locked';
+/** The character panel beside the editor, a slim bar of icons, or the whole work area. */
+export type PanelMode = 'open' | 'mini' | 'full';
 /** Where AI reading runs: an API key, or the author's Claude subscription through Claude Code. */
 export interface AiBackend {
   kind: 'api' | 'claude-cli';
   plan: string | null;
   /** Claude Code is set up but not signed in. */
   signedOut?: boolean;
+  /** The Claude model that reads, e.g. claude-opus-5-5. */
+  model?: string;
 }
 
 /** A book in the library, shown as a tab. Its id is its project id. */
@@ -56,6 +69,8 @@ interface SavedBook {
 }
 
 const bookKey = (id: string) => `questwright:book:${id}`;
+/** Where a painting's image is kept: images are too large to live in the book's save. */
+export const imageKey = (id: string) => `questwright:img:${id}`;
 const metaOf = (p: Project): BookMeta => ({ id: p.id, title: p.title, updatedAt: Date.now() });
 
 interface Persisted {
@@ -69,7 +84,64 @@ interface Persisted {
   accessCode: string;
   /** Author achievements earned in this browser. */
   achievements: string[];
+  /** Width of the character panel beside the editor, in pixels. */
+  panelWidth: number;
+  panelMode: PanelMode;
+  /** Show a character's approved painting in place of their figure, where they have one. */
+  portraits: boolean;
+  /** The codex over the whole window, or in place of the side panel. */
+  codexDock: 'full' | 'panel';
+  /** Show the equipment slots around a character's figure. */
+  showGear: boolean;
+  /** The table of contents beside the editor. */
+  outlineOpen: boolean;
+  /** Painted illustrations: which service paints, at what quality, and whether new looks are painted on their own. */
+  images: ImageSettings;
+  /** What paintings have cost this calendar month, in US dollars (estimated). */
+  imageSpend: { month: string; usd: number };
+  /** Paintings and icons asked for: waiting, running, and the most recent finished ones. */
+  paintLog: PaintJob[];
 }
+
+export interface PaintJob {
+  id: string;
+  /** The illustration key: an entry key, or "icon:" and one. */
+  key: string;
+  name: string;
+  icon: boolean;
+  /** Who was asked to paint it, as shown to the author. */
+  painter: string;
+  local: boolean;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  queuedAt: number;
+  startedAt?: number;
+  endedAt?: number;
+  error?: string;
+  cost?: number;
+  auto?: boolean;
+}
+
+export interface LorePassState {
+  total: number;
+  done: number;
+  added: number;
+  chapter?: string;
+  cancelled?: boolean;
+  error?: string;
+}
+
+export interface ImageSettings {
+  provider: Painter;
+  /** The installed local model to paint with, when the painter is 'local'. */
+  localModel?: string;
+  quality: ImageQuality;
+  /** Paint entries on their own when they gain a description or their look changes. */
+  auto: boolean;
+  /** Automatic painting stops for the month at this spend, in US dollars. */
+  monthlyCap: number;
+}
+
+export const thisMonth = () => new Date().toISOString().slice(0, 7);
 
 export interface StudioState extends Persisted {
   manuscript: Manuscript;
@@ -82,6 +154,14 @@ export interface StudioState extends Persisted {
   lastEditAt: number;
   aiStatus: AiStatus;
   aiBackend: AiBackend | null;
+  /** The codex screen: null when closed, otherwise the entry key to open on ('' for none). */
+  codexOpen: string | null;
+  /** Which image services the server has a key for. */
+  imageKeys: Record<ImageProvider, boolean>;
+  /** Local models ready to paint with (installed, with the runtime). */
+  localReady: string[];
+  /** Entry keys being painted now. */
+  painting: string[];
   inFlight: string[];
   failed: Record<string, string>;
   toasts: Toast[];
@@ -109,8 +189,54 @@ export interface StudioState extends Persisted {
   toggleAppearanceLock(characterId: string): void;
   drawCharacter(characterId: string): void;
   setArtStyle(style: ArtStyle): void;
+  setRenderStyle(render: RenderStyle): void;
+  /** The look this book's paintings are made in. */
+  setPaintStyle(style: ArtStyleKey): void;
+  setPanelWidth(px: number): void;
+  setPanelMode(mode: PanelMode): void;
+  setPortraits(on: boolean): void;
+  setCodexDock(dock: 'full' | 'panel'): void;
+  setShowGear(on: boolean): void;
+  setOutlineOpen(on: boolean): void;
+  /** The lore pass in progress, or null. */
+  lorePass: LorePassState | null;
+  setLorePass(p: LorePassState | null): void;
+  /** A lore pass's finds for some paragraphs; returns how many new memories they added. */
+  addLore(items: { pid: string; text: string; finds: Pick<Extraction, 'lore' | 'relations'> }[]): number;
+  markLoreRead(key: string, hash: string): void;
+  setCard(key: string, card: GameCard | null): void;
+  /** Chapter summaries being written, or null. `added` counts chapters summarised. */
+  storyPass: LorePassState | null;
+  setStoryPass(p: LorePassState | null): void;
+  setChapterStory(key: string, story: ChapterStory | null): void;
+  setSofar(sofar: Narrative['sofar'] | null): void;
+  /** Entry keys whose cards are being written now (or waiting). */
+  writingCards: string[];
+  setWritingCards(keys: string[]): void;
+  /** Learned system message formats: saving, switching or removing one reads the book again with them. */
+  savePattern(p: LearnedPattern): void;
+  updatePattern(id: string, patch: Partial<LearnedPattern>): void;
+  deletePattern(id: string): void;
   /** Author correction: sets a currency or item count from the paragraph at `pid` onwards. */
   setValue(pid: string, characterId: string, kind: 'currency' | 'item', name: string, value: number): void;
+  /** A written codex entry for a compendium entry, and how many memories it was written from. */
+  setCodex(key: string, text: string, from: number): void;
+  setCodexOpen(key: string | null): void;
+  setImageSettings(patch: Partial<ImageSettings>): void;
+  setImageKeys(keys: Record<ImageProvider, boolean>): void;
+  setLocalReady(ids: string[]): void;
+  setPainting(keys: string[]): void;
+  logPaintJob(job: PaintJob): void;
+  updatePaintJob(id: string, patch: Partial<PaintJob>): void;
+  /** Takes a waiting painting out of the queue. */
+  cancelPaintJob(id: string): void;
+  clearPaintLog(): void;
+  /** A new painting of an entry; the first one, or one asked for with `approve`, becomes the approved version. */
+  addIllustration(key: string, ill: Illustration, approve?: boolean): void;
+  approveIllustration(key: string, id: string): void;
+  deleteIllustration(key: string, id: string): void;
+  /** Adds an illustration to the house style references every new painting matches, or takes it off. */
+  toggleStyleRef(id: string): void;
   /** The author's own notes on a compendium entry (or a character's story). */
   setLoreNote(key: string, text: string): void;
   /** Author's word on which magic system a skill belongs to (null: none), for every character who has it. */
@@ -134,6 +260,10 @@ export interface StudioState extends Persisted {
   startSkim(chapterId: string): void;
   /** Opens a new, empty book in its own tab. */
   newProject(): void;
+  /** What re-reading the open book would cover: the paragraphs that would be read, in reading order. */
+  rereadPlan(): { pid: string; chapter: number; chars: number }[];
+  /** Queues every prose paragraph of the open book for AI reading again. */
+  rereadBook(): void;
   /** Opens an exported book in its own tab. */
   importProject(project: Project, doc: JSONContent): void;
   switchBook(id: string): Promise<void>;
@@ -232,6 +362,21 @@ export const useStudio = create<StudioState>()(
         aiEnabled: true,
         accessCode: '',
         achievements: [],
+        panelWidth: 420,
+        panelMode: 'open',
+        portraits: false,
+        codexDock: 'full',
+        showGear: true,
+        outlineOpen: true,
+        lorePass: null,
+        storyPass: null,
+        writingCards: [],
+        images: { provider: 'gemini', quality: 'final', auto: false, monthlyCap: 10 },
+        imageSpend: { month: thisMonth(), usd: 0 },
+        imageKeys: { gemini: false, openai: false, flux: false },
+        localReady: [],
+        painting: [],
+        paintLog: [],
         flash: [],
         hydrated: false,
         skimming: null,
@@ -241,6 +386,7 @@ export const useStudio = create<StudioState>()(
         lastEditAt: 0,
         aiStatus: 'checking',
         aiBackend: null,
+        codexOpen: null,
         inFlight: [],
         failed: {},
         toasts: [],
@@ -255,7 +401,7 @@ export const useStudio = create<StudioState>()(
           const sys = d.project.records
             .filter((r) => r.source === 'parser' && !before.has(r.id) && r.change.kind !== 'mention')
             .filter((r) => !s.project.records.some((o) => o.source === 'parser' && o.paragraphId === r.paragraphId && JSON.stringify(o.change) === JSON.stringify(r.change)))
-            .map((r) => ({ kind: 'sys' as const, head: 'System', body: `${r.change.kind === 'merge' || r.change.kind === 'lore' ? '' : `${name(r.change.character)} · `}${describeChange(r.change, name)}` }));
+            .map((r) => ({ kind: 'sys' as const, head: 'System', body: `${r.change.kind === 'merge' || r.change.kind === 'lore' || r.change.kind === 'relation' ? '' : `${name(r.change.character)} · `}${describeChange(r.change, name)}` }));
           commit({ doc, project: d.project, manuscript: d.manuscript, queue: d.queue, lastEditAt: Date.now() }, sys.slice(0, 4));
         },
         setCursor(pid) {
@@ -329,8 +475,96 @@ export const useStudio = create<StudioState>()(
           c.drawn = true;
           set({ project });
         },
+        setPanelWidth(panelWidth) {
+          set({ panelWidth: Math.round(panelWidth) });
+        },
+        savePattern(p) {
+          const s = get();
+          const patterns = [...(s.project.patterns ?? []).filter((x) => x.id !== p.id), p];
+          const d = derive({ ...s.project, patterns }, s.doc);
+          commit({ project: d.project, manuscript: d.manuscript, queue: d.queue });
+        },
+        updatePattern(id, patch) {
+          const s = get();
+          const patterns = (s.project.patterns ?? []).map((x) => (x.id === id ? { ...x, ...patch } : x));
+          const d = derive({ ...s.project, patterns }, s.doc);
+          commit({ project: d.project, manuscript: d.manuscript, queue: d.queue });
+        },
+        deletePattern(id) {
+          const s = get();
+          const d = derive({ ...s.project, patterns: (s.project.patterns ?? []).filter((x) => x.id !== id) }, s.doc);
+          commit({ project: d.project, manuscript: d.manuscript, queue: d.queue });
+        },
+        setLorePass(lorePass) {
+          set({ lorePass });
+        },
+        addLore(items) {
+          let project = get().project;
+          let added = 0;
+          for (const it of items) {
+            const r = applyLore(project, it.pid, it.text, it.finds, newId);
+            project = r.project;
+            added += r.added;
+          }
+          if (added) commit({ project });
+          return added;
+        },
+        setWritingCards(writingCards) {
+          set({ writingCards });
+        },
+        setCard(key, card) {
+          const p = get().project;
+          const cards = { ...p.cards };
+          if (card) cards[key] = card;
+          else delete cards[key];
+          set({ project: { ...p, cards } });
+        },
+        setStoryPass(storyPass) {
+          set({ storyPass });
+        },
+        setChapterStory(key, story) {
+          const p = get().project;
+          const chapters = { ...p.narrative?.chapters };
+          if (story) chapters[key] = story;
+          else delete chapters[key];
+          set({ project: { ...p, narrative: { ...p.narrative, chapters } } });
+        },
+        setSofar(sofar) {
+          const p = get().project;
+          const narrative: Narrative = { chapters: p.narrative?.chapters ?? {} };
+          if (sofar) narrative.sofar = sofar;
+          set({ project: { ...p, narrative } });
+        },
+        markLoreRead(key, hash) {
+          const p = get().project;
+          set({ project: { ...p, loreRead: { ...p.loreRead, [key]: hash } } });
+        },
+        setOutlineOpen(outlineOpen) {
+          set({ outlineOpen });
+        },
+        setShowGear(showGear) {
+          set({ showGear });
+        },
+        setCodexDock(codexDock) {
+          set({ codexDock });
+        },
+        setPortraits(portraits) {
+          set({ portraits });
+        },
+        setPanelMode(panelMode) {
+          set({ panelMode });
+        },
+        setRenderStyle(render) {
+          const s = get();
+          set({ project: { ...s.project, art: { style: s.project.art?.style ?? 'painterly', render } } });
+        },
+        setPaintStyle(paint) {
+          const p = get().project;
+          set({ project: { ...p, art: { style: p.art?.style ?? 'painterly', ...p.art, paint } } });
+        },
         setArtStyle(style) {
-          set({ project: { ...get().project, art: { style } } });
+          const p = get().project;
+          set({ project: { ...p, art: { ...p.art, style } } });
         },
         setValue(pid, characterId, kind, name, value) {
           const project = structuredClone(get().project);
@@ -340,6 +574,75 @@ export const useStudio = create<StudioState>()(
               : ({ kind: 'item', character: characterId, item: name, delta: 0, set: value } as const);
           project.records.push({ id: newId(), paragraphId: pid, textHash: '', source: 'author', status: 'applied', change });
           commit({ project });
+        },
+        setCodexOpen(codexOpen) {
+          set({ codexOpen });
+        },
+        setImageSettings(patch) {
+          set({ images: { ...get().images, ...patch } });
+        },
+        setImageKeys(imageKeys) {
+          set({ imageKeys });
+        },
+        setLocalReady(localReady) {
+          set({ localReady });
+        },
+        logPaintJob(job) {
+          set({ paintLog: [...get().paintLog, job].slice(-80) });
+        },
+        updatePaintJob(id, patch) {
+          set({ paintLog: get().paintLog.map((j) => (j.id === id ? { ...j, ...patch } : j)) });
+        },
+        cancelPaintJob(id) {
+          const s = get();
+          const job = s.paintLog.find((j) => j.id === id);
+          if (job?.status !== 'queued') return;
+          set({ paintLog: s.paintLog.map((j) => (j.id === id ? { ...j, status: 'cancelled', endedAt: Date.now() } : j)), painting: s.painting.filter((k) => k !== job.key) });
+        },
+        clearPaintLog() {
+          set({ paintLog: get().paintLog.filter((j) => j.status === 'queued' || j.status === 'running') });
+        },
+        setPainting(painting) {
+          set({ painting });
+        },
+        addIllustration(key, ill, approve) {
+          const s = get();
+          const project = structuredClone(s.project);
+          const prev = project.illustrations?.[key];
+          const next = { versions: [...(prev?.versions ?? []), ill], approved: approve || !prev?.approved ? ill.id : prev.approved };
+          project.illustrations = { ...project.illustrations, [key]: next };
+          const month = thisMonth();
+          const usd = (s.imageSpend.month === month ? s.imageSpend.usd : 0) + ill.cost;
+          set({ project, imageSpend: { month, usd } });
+        },
+        approveIllustration(key, id) {
+          const project = structuredClone(get().project);
+          const set_ = project.illustrations?.[key];
+          if (!set_?.versions.some((v) => v.id === id)) return;
+          set_.approved = id;
+          set({ project });
+        },
+        deleteIllustration(key, id) {
+          const project = structuredClone(get().project);
+          const set_ = project.illustrations?.[key];
+          if (!set_) return;
+          set_.versions = set_.versions.filter((v) => v.id !== id);
+          if (set_.approved === id) set_.approved = set_.versions.at(-1)?.id;
+          if (!set_.versions.length) delete project.illustrations![key];
+          project.styleRefs = project.styleRefs?.filter((r) => r !== id);
+          set({ project });
+          void idbDelete(imageKey(id)).catch(() => undefined);
+        },
+        toggleStyleRef(id) {
+          const project = structuredClone(get().project);
+          const refs = project.styleRefs ?? [];
+          project.styleRefs = refs.includes(id) ? refs.filter((r) => r !== id) : [...refs, id].slice(-3);
+          set({ project });
+        },
+        setCodex(key, text, from) {
+          const project = structuredClone(get().project);
+          project.codex = { ...project.codex, [key]: { text, from } };
+          set({ project });
         },
         setLoreNote(key, text) {
           const project = structuredClone(get().project);
@@ -464,6 +767,19 @@ export const useStudio = create<StudioState>()(
           const { project, doc } = sampleState();
           openBook(fresh(project, doc));
         },
+        rereadPlan() {
+          const s = get();
+          const d = derive({ ...s.project, extracted: {} }, s.doc);
+          const byId = new Map(flatten(d.manuscript).map((p) => [p.id, p]));
+          return d.queue.map((pid) => ({ pid, chapter: byId.get(pid)?.chapterIndex ?? 0, chars: byId.get(pid)?.text.length ?? 0 }));
+        },
+        rereadBook() {
+          const s = get();
+          // Forget which paragraphs were read; claimed and dismissed finds stay, so nothing is proposed twice.
+          const d = derive({ ...s.project, extracted: {} }, s.doc);
+          set({ project: d.project, manuscript: d.manuscript, queue: d.queue, failed: {} });
+          get().toast({ kind: 'unlock', head: 'Re-reading the book', body: `${d.queue.length} paragraphs queued. Pause any time from the header.` });
+        },
         newProject() {
           openBook(fresh(emptyProject(newId(), 'Untitled book'), BLANK_DOC));
         },
@@ -489,6 +805,8 @@ export const useStudio = create<StudioState>()(
             if (get().project.id === id) return;
           }
           set({ books: get().books.filter((b) => b.id !== id) });
+          const saved = await idbGet<SavedBook>(bookKey(id)).catch(() => undefined);
+          for (const ill of Object.values(saved?.project.illustrations ?? {}).flatMap((x) => x.versions)) void idbDelete(imageKey(ill.id)).catch(() => undefined);
           await idbDelete(bookKey(id)).catch(() => undefined);
         },
         toast(t) {
@@ -506,7 +824,7 @@ export const useStudio = create<StudioState>()(
       onRehydrateStorage: () => () => {
         useStudio.setState((s) => ({ hydrated: true, docVersion: s.docVersion + 1 }));
       },
-      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements }),
+      partialize: (s): Persisted => ({ project: s.project, doc: s.doc, tab: s.tab, collapsed: s.collapsed, books: s.books, aiEnabled: s.aiEnabled, accessCode: s.accessCode, achievements: s.achievements, panelWidth: s.panelWidth, panelMode: s.panelMode, portraits: s.portraits, codexDock: s.codexDock, showGear: s.showGear, outlineOpen: s.outlineOpen, images: s.images, imageSpend: s.imageSpend, paintLog: s.paintLog.filter((j) => j.status !== 'queued' && j.status !== 'running') }),
       merge: (persisted, current) => {
         const p = persisted as Partial<Persisted> | undefined;
         if (!p?.project || !p.doc) return current;
@@ -514,7 +832,7 @@ export const useStudio = create<StudioState>()(
         // Saves from before the library hold one book: it becomes the first tab.
         const books = (p.books ?? []).map((b) => (b.id === d.project.id ? { ...b, title: d.project.title } : b));
         if (!books.some((b) => b.id === d.project.id)) books.unshift(metaOf(d.project));
-        return { ...current, ...p, books, project: d.project, manuscript: d.manuscript, queue: d.queue };
+        return { ...current, ...p, images: { ...current.images, ...p.images }, books, project: d.project, manuscript: d.manuscript, queue: d.queue };
       },
     },
   ),
